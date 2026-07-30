@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Pusat Tutorial iKISI</title>
+<style>
+  :root{
+    --kisi-dark: #14432c;
+    --kisi-green: #1a5c3a;
+    --kisi-emerald: #2ecc71;
+    --kisi-emerald-soft: #eafaf1;
+    --ink: #14201a;
+    --sub: #6b7d74;
+    --line: #e4ece7;
+    --paper: #ffffff;
+    --bg: #f4f8f5;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;}
+  html{height:100%;}
+  body{
+    font-family:'Segoe UI',-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    min-height:100svh; /* svh = tinggi viewport TANPA address bar, jadi mockup tidak pernah lebih tinggi dari layar yang benar-benar terlihat */
+    padding:16px;
+    overflow-y:auto; /* jaga-jaga: kalau tetap lebih tinggi dari layar, bisa discroll, bukan terpotong */
+  }
+
+  /* ============ PHONE FRAME ============ */
+  #phone{
+    width:100%;
+    max-width:360px;
+    height:780px;
+    max-height:88vh;
+    max-height:88svh; /* dihitung dari tinggi layar yang benar-benar terlihat (tanpa address bar HP) */
+    background:var(--paper);
+    border-radius:34px;
+    box-shadow:0 20px 60px rgba(20,67,44,.18), 0 2px 8px rgba(20,67,44,.08);
+    overflow:hidden;
+    position:relative;
+    border:8px solid #0f2e1e;
+  }
+  #app{position:absolute; inset:0; overflow:hidden;}
+  .screen{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    background:var(--paper);
+    transition: transform .32s cubic-bezier(.22,.61,.36,1), opacity .25s ease;
+  }
+
+  /* ============ MENU SCREEN ============ */
+  #menu-screen{ overflow-y:auto; }
+  .menu-header{
+    background:linear-gradient(155deg, var(--kisi-dark), var(--kisi-green) 70%);
+    padding:28px 22px 26px 22px;
+    color:#fff;
+    position:relative;
+  }
+  .menu-header::after{
+    content:"";
+    position:absolute; left:0; right:0; bottom:-1px; height:18px;
+    background:var(--paper);
+    border-radius:18px 18px 0 0;
+  }
+  .menu-eyebrow{
+    font-size:11px; font-weight:700; letter-spacing:1.5px;
+    color:#a9e6c4; text-transform:uppercase; margin-bottom:6px;
+  }
+  .menu-title{ font-size:24px; font-weight:800; letter-spacing:-.2px; margin:0 0 6px 0;}
+  .menu-desc{ font-size:12.5px; color:#cfe8da; line-height:1.5; margin:0; max-width:290px;}
+  .menu-list{ padding:16px 18px 26px 18px; display:flex; flex-direction:column; gap:10px;}
+  .menu-item{
+    display:flex; align-items:center; gap:14px;
+    padding:14px 14px; border:1px solid var(--line); border-radius:16px;
+    background:var(--paper); cursor:pointer;
+    transition: border-color .15s ease, transform .12s ease;
+  }
+  .menu-item:active{ transform:scale(.98); }
+  .menu-item:hover{ border-color:#c7ddce; }
+  .menu-icon{
+    width:44px; height:44px; border-radius:12px; flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center; font-size:20px;
+  }
+  .menu-item-body{ flex:1; min-width:0; }
+  .menu-item-title{ font-size:14.5px; font-weight:700; margin-bottom:2px; }
+  .menu-item-sub{ font-size:11.5px; color:var(--sub); }
+  .menu-item-count{
+    font-size:10.5px; font-weight:700; color:var(--kisi-green);
+    background:var(--kisi-emerald-soft); padding:3px 9px; border-radius:999px; flex:0 0 auto;
+  }
+  .menu-chevron{ color:#c3cdc7; font-size:18px; flex:0 0 auto; }
+  .menu-footnote{
+    text-align:center; font-size:10.5px; color:#a7b3ac; padding:4px 30px 4px 30px;
+  }
+
+  /* ============ SUBMENU SCREEN (topik dalam 1 kategori) ============ */
+  #submenu-screen{ transform:translateX(100%); overflow-y:auto; }
+  #submenu-screen.active{ transform:translateX(0); }
+  .submenu-topbar{
+    padding:16px 16px 6px 16px;
+    display:flex; align-items:center; gap:10px;
+    background:linear-gradient(155deg, var(--kisi-dark), var(--kisi-green) 70%);
+    color:#fff; position:relative; padding-bottom:22px;
+  }
+  .submenu-topbar::after{
+    content:""; position:absolute; left:0; right:0; bottom:-1px; height:16px;
+    background:var(--paper); border-radius:16px 16px 0 0;
+  }
+  .submenu-back{
+    width:34px; height:34px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; color:#fff; cursor:pointer; margin-left:-6px; flex:0 0 auto;
+  }
+  .submenu-heading-title{ font-size:17px; font-weight:800; }
+  .submenu-heading-sub{ font-size:11.5px; color:#cfe8da; margin-top:1px; }
+  .submenu-list{ padding:16px 18px 26px 18px; display:flex; flex-direction:column; gap:10px;}
+
+  /* ============ TUTORIAL (SWIPE) SCREEN ============ */
+  #tut-screen{ transform:translateX(100%); }
+  #tut-screen.active{ transform:translateX(0); }
+  #menu-screen.hidden{ transform:translateX(-28%); opacity:0; pointer-events:none; }
+  #submenu-screen.hidden{ transform:translateX(-28%); opacity:0; pointer-events:none; }
+
+  .tut-topbar{
+    padding:14px 16px 10px 16px;
+    display:flex; align-items:center; gap:10px;
+    background:var(--paper);
+    position:relative; z-index:5;
+  }
+  .tut-back{
+    width:34px; height:34px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; color:var(--ink); cursor:pointer; margin-left:-6px;
+  }
+  .tut-heading{ flex:1; min-width:0; }
+  .tut-heading-title{ font-size:15px; font-weight:800; line-height:1.2; }
+  .tut-heading-sub{ font-size:11px; color:var(--sub); margin-top:1px; }
+
+  .progress-row{ display:flex; gap:4px; padding:0 16px 12px 16px; }
+  .progress-seg{
+    flex:1; height:4px; border-radius:3px; background:var(--line); overflow:hidden;
+  }
+  .progress-seg > i{
+    display:block; height:100%; width:0%; background:var(--kisi-emerald);
+    transition:width .25s ease;
+  }
+  .progress-seg.done > i{ width:100%; }
+  .progress-seg.active > i{ width:100%; }
+
+  .slides-viewport{
+    flex:1; position:relative; overflow:hidden;
+    touch-action:pan-y;
+  }
+  .slides-track{
+    display:flex; height:100%;
+    transition: transform .32s cubic-bezier(.22,.61,.36,1);
+  }
+  .slide{
+    flex:0 0 100%; height:100%;
+    display:flex; flex-direction:column;
+    padding:4px 20px 0 20px;
+    overflow-y:auto;
+  }
+  .slide-image-wrap{
+    /* Rasio dikunci 1080:1760 (~1:1.63) supaya ukuran gambar yang harus
+       disiapkan PASTI, tidak ikut berubah-ubah mengikuti panjang teks. */
+    width:100%; aspect-ratio: 1080 / 1760; flex:0 0 auto;
+    border-radius:20px; overflow:hidden;
+    background:linear-gradient(160deg,#eef5f0,#e2eee6);
+    display:flex; align-items:center; justify-content:center;
+    position:relative; margin-bottom:14px;
+    border:1px solid var(--line);
+  }
+  .slide-image-wrap img{
+    /* contain = gambar SELALU tampil utuh, tidak pernah terpotong.
+       Penting karena gambar bisa berisi penanda/kotak klik yang wajib terlihat. */
+    max-width:100%; max-height:100%; width:auto; height:auto;
+    object-fit:contain; display:block;
+  }
+  .slide-image-placeholder{
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    color:#9fb3a8; padding:20px; text-align:center;
+  }
+  .slide-image-placeholder .ph-icon{ font-size:30px; }
+  .slide-image-placeholder .ph-label{ font-size:11.5px; font-weight:600; line-height:1.5; }
+  .slide-step-tag{
+    position:absolute; top:12px; left:12px;
+    background:rgba(20,67,44,.82); color:#fff; font-size:10.5px; font-weight:700;
+    padding:5px 10px; border-radius:999px; letter-spacing:.3px;
+  }
+  .slide-text{ padding-bottom:14px; }
+  .slide-title{ font-size:17px; font-weight:800; margin:0 0 6px 0; letter-spacing:-.2px; }
+  .slide-desc{ font-size:13px; color:var(--sub); line-height:1.55; margin:0; }
+
+  .tut-nav{
+    display:flex; align-items:center; gap:10px;
+    padding:12px 20px 22px 20px;
+  }
+  .nav-btn{
+    flex:1; padding:13px; border-radius:14px; text-align:center;
+    font-size:14px; font-weight:800; cursor:pointer; border:none;
+    transition: opacity .15s ease, transform .12s ease;
+  }
+  .nav-btn:active{ transform:scale(.98); }
+  .nav-prev{ background:var(--bg); color:var(--ink); flex:0 0 76px; }
+  .nav-prev[disabled]{ opacity:.35; pointer-events:none; }
+  .nav-next{ background:var(--kisi-green); color:#fff; }
+
+  /* tap zones for swipe-like navigation on desktop */
+  .tap-zone{ position:absolute; top:0; bottom:0; width:26%; z-index:2; cursor:pointer; }
+  .tap-zone.left{ left:0; }
+  .tap-zone.right{ right:0; }
+
+  /* completion note */
+  .end-badge{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:11px; font-weight:700; color:var(--kisi-green);
+    background:var(--kisi-emerald-soft); padding:5px 10px; border-radius:999px;
+    margin-bottom:8px;
+  }
+
+  ::-webkit-scrollbar{ width:0; height:0; }
+
+  .btn-suggest{
+    display:block; text-align:center; text-decoration:none;
+    margin:6px 16px 14px 16px; padding:12px; border-radius:14px;
+    background:var(--kisi-emerald-soft); color:var(--kisi-green);
+    font-size:13px; font-weight:800; border:1px dashed var(--kisi-green);
+  }
+  .btn-suggest:active{ opacity:.85; }
+  .sync-badge{
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    font-size:10.5px; color:var(--sub); padding:0 16px 10px 16px;
+  }
+  .sync-dot{ width:6px; height:6px; border-radius:50%; background:var(--kisi-emerald); }
+</style>
+</head>
+<body>
+
+<div id="phone">
+  <div id="app">
+
+    <!-- ============ MENU SCREEN ============ -->
+    <div class="screen" id="menu-screen">
+      <div class="menu-header">
+        <div class="menu-eyebrow">Panduan iKISI</div>
+        <h1 class="menu-title">Pusat Tutorial</h1>
+        <p class="menu-desc">Pilih topik di bawah untuk melihat panduan langkah demi langkah. Geser gambar ke kiri/kanan untuk lanjut.</p>
+      </div>
+      <div class="menu-list" id="menu-list"><!-- diisi otomatis dari Firestore --></div>
+      <a class="btn-suggest" href="submit.html">+ Usul Tutorial Baru</a>
+      <div class="sync-badge" id="sync-badge"><span class="sync-dot"></span> Tersinkron otomatis</div>
+    </div>
+
+    <!-- ============ SUBMENU SCREEN (daftar topik per kategori) ============ -->
+    <div class="screen" id="submenu-screen">
+      <div class="submenu-topbar">
+        <div class="submenu-back" id="btn-submenu-back">‹</div>
+        <div>
+          <div class="submenu-heading-title" id="submenu-title">Kategori</div>
+          <div class="submenu-heading-sub" id="submenu-sub">Pilih topik tutorial</div>
+        </div>
+      </div>
+      <div class="submenu-list" id="submenu-list"><!-- diisi oleh JS --></div>
+    </div>
+
+    <!-- ============ TUTORIAL SCREEN ============ -->
+    <div class="screen" id="tut-screen">
+      <div class="tut-topbar">
+        <div class="tut-back" id="btn-back">‹</div>
+        <!-- back di sini akan kembali ke submenu topik (bukan ke menu kategori) -->
+        <div class="tut-heading">
+          <div class="tut-heading-title" id="tut-title">Judul Tutorial</div>
+          <div class="tut-heading-sub" id="tut-step-label">Langkah 1 dari 5</div>
+        </div>
+      </div>
+      <div class="progress-row" id="progress-row"></div>
+
+      <div class="slides-viewport" id="slides-viewport">
+        <div class="tap-zone left" id="zone-prev"></div>
+        <div class="tap-zone right" id="zone-next"></div>
+        <div class="slides-track" id="slides-track"><!-- diisi oleh JS --></div>
+      </div>
+
+      <div class="tut-nav">
+        <button class="nav-btn nav-prev" id="btn-prev">Kembali</button>
+        <button class="nav-btn nav-next" id="btn-next">Lanjut</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+import { getFirestore, collection, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+/* ========================= DATA (live dari Firestore) ========================= */
+let CATEGORIES = [];
+const syncBadge = document.getElementById('sync-badge');
+
+const q = query(collection(db, 'categories'), orderBy('order'));
+onSnapshot(q, (snap) => {
+  CATEGORIES = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  syncBadge.innerHTML = '<span class="sync-dot"></span> Tersinkron otomatis';
+  renderMenu();
+}, (err) => {
+  console.error('Gagal memuat data tutorial:', err);
+  syncBadge.textContent = '⚠️ Gagal tersambung ke server, coba refresh halaman';
+});
+
+
+/* ========================= RENDER & LOGIC ========================= */
+const menuList = document.getElementById('menu-list');
+const submenuScreen = document.getElementById('submenu-screen');
+const submenuList = document.getElementById('submenu-list');
+const submenuTitle = document.getElementById('submenu-title');
+const submenuSub = document.getElementById('submenu-sub');
+const tutScreen = document.getElementById('tut-screen');
+const menuScreen = document.getElementById('menu-screen');
+const slidesTrack = document.getElementById('slides-track');
+const progressRow = document.getElementById('progress-row');
+const tutTitle = document.getElementById('tut-title');
+const tutStepLabel = document.getElementById('tut-step-label');
+const btnPrev = document.getElementById('btn-prev');
+const btnNext = document.getElementById('btn-next');
+
+let currentCategory = null;
+let currentTutorial = null;
+let currentIndex = 0;
+
+function countSlides(cat){
+  return cat.items.reduce((sum, it) => sum + it.slides.length, 0);
+}
+
+/* ---------- LEVEL 1: daftar kategori ---------- */
+function renderMenu(){
+  menuList.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const item = document.createElement('div');
+    item.className = 'menu-item';
+    item.innerHTML = `
+      <div class="menu-icon" style="background:${cat.tint}">${cat.icon}</div>
+      <div class="menu-item-body">
+        <div class="menu-item-title">${cat.title}</div>
+        <div class="menu-item-sub">${cat.desc || (cat.items.length + ' topik')}</div>
+      </div>
+      <div class="menu-item-count">${cat.items.length}</div>
+      <div class="menu-chevron">›</div>
+    `;
+    item.addEventListener('click', () => openCategory(cat.id));
+    menuList.appendChild(item);
+  });
+}
+
+/* ---------- LEVEL 2: daftar topik dalam 1 kategori ---------- */
+function openCategory(id){
+  currentCategory = CATEGORIES.find(c => c.id === id);
+  submenuTitle.textContent = currentCategory.title;
+  submenuSub.textContent = `${currentCategory.items.length} topik tutorial`;
+  submenuList.innerHTML = '';
+  currentCategory.items.forEach(it => {
+    const row = document.createElement('div');
+    row.className = 'menu-item';
+    row.innerHTML = `
+      <div class="menu-icon" style="background:${currentCategory.tint}">📄</div>
+      <div class="menu-item-body">
+        <div class="menu-item-title">${it.title}</div>
+        <div class="menu-item-sub">${it.slides.length} langkah</div>
+      </div>
+      <div class="menu-item-count">${it.slides.length}</div>
+      <div class="menu-chevron">›</div>
+    `;
+    row.addEventListener('click', () => openTutorial(it.id));
+    submenuList.appendChild(row);
+  });
+  submenuScreen.classList.add('active');
+  menuScreen.classList.add('hidden');
+}
+
+function closeSubmenu(){
+  submenuScreen.classList.remove('active');
+  menuScreen.classList.remove('hidden');
+}
+
+/* ---------- LEVEL 3: slide tutorial ---------- */
+function openTutorial(id){
+  currentTutorial = currentCategory.items.find(t => t.id === id);
+  currentIndex = 0;
+  tutTitle.textContent = currentTutorial.title;
+  buildSlides();
+  buildProgress();
+  goToSlide(0, false);
+  tutScreen.classList.add('active');
+  submenuScreen.classList.add('hidden');
+}
+
+function closeTutorial(){
+  tutScreen.classList.remove('active');
+  submenuScreen.classList.remove('hidden');
+}
+
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+function formatDescText(str){
+  return escapeHtml(str)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+function buildSlides(){
+  slidesTrack.innerHTML = '';
+  currentTutorial.slides.forEach((s, i) => {
+    const slide = document.createElement('div');
+    slide.className = 'slide';
+    // Format simpel baru: cukup isi { image, text }.
+    // Format lama { image, title, desc } masih tetap didukung otomatis.
+    const hasSimpleText = s.text !== undefined;
+    const altText = s.title || `Langkah ${i+1}`;
+    const imgHtml = s.image
+      ? `<img src="${s.image}" alt="${altText}">`
+      : `<div class="slide-image-placeholder">
+           <div class="ph-icon">🖼️</div>
+           <div class="ph-label">Ganti dengan screenshot<br>langkah ${i+1}</div>
+         </div>`;
+    const textHtml = hasSimpleText
+      ? `<p class="slide-desc">${formatDescText(s.text)}</p>`
+      : `<h2 class="slide-title">${escapeHtml(s.title)}</h2>
+         <p class="slide-desc">${formatDescText(s.desc)}</p>`;
+    slide.innerHTML = `
+      <div class="slide-image-wrap">
+        <div class="slide-step-tag">${i+1} / ${currentTutorial.slides.length}</div>
+        ${imgHtml}
+      </div>
+      <div class="slide-text">
+        ${textHtml}
+      </div>
+    `;
+    slidesTrack.appendChild(slide);
+  });
+}
+
+function buildProgress(){
+  progressRow.innerHTML = '';
+  currentTutorial.slides.forEach(() => {
+    const seg = document.createElement('div');
+    seg.className = 'progress-seg';
+    seg.innerHTML = '<i></i>';
+    progressRow.appendChild(seg);
+  });
+}
+
+function updateProgress(){
+  const segs = progressRow.children;
+  for(let i=0; i<segs.length; i++){
+    segs[i].classList.remove('done','active');
+    if(i < currentIndex) segs[i].classList.add('done');
+    else if(i === currentIndex) segs[i].classList.add('active');
+  }
+}
+
+function goToSlide(index, animate = true){
+  const max = currentTutorial.slides.length - 1;
+  currentIndex = Math.max(0, Math.min(max, index));
+  slidesTrack.style.transition = animate ? '' : 'none';
+  slidesTrack.style.transform = `translateX(-${currentIndex * 100}%)`;
+  if(!animate){ requestAnimationFrame(()=>{ slidesTrack.style.transition=''; }); }
+  updateProgress();
+  tutStepLabel.textContent = `Langkah ${currentIndex+1} dari ${currentTutorial.slides.length}`;
+  btnPrev.disabled = currentIndex === 0;
+  btnNext.textContent = currentIndex === max ? 'Selesai' : 'Lanjut';
+}
+
+btnNext.addEventListener('click', () => {
+  const max = currentTutorial.slides.length - 1;
+  if(currentIndex === max){ closeTutorial(); }
+  else{ goToSlide(currentIndex + 1); }
+});
+btnPrev.addEventListener('click', () => goToSlide(currentIndex - 1));
+document.getElementById('zone-next').addEventListener('click', () => {
+  const max = currentTutorial.slides.length - 1;
+  if(currentIndex < max) goToSlide(currentIndex + 1);
+});
+document.getElementById('zone-prev').addEventListener('click', () => {
+  if(currentIndex > 0) goToSlide(currentIndex - 1);
+});
+document.getElementById('btn-back').addEventListener('click', closeTutorial);
+document.getElementById('btn-submenu-back').addEventListener('click', closeSubmenu);
+
+/* ---------- swipe gesture (touch + mouse) ---------- */
+const viewport = document.getElementById('slides-viewport');
+let startX = 0, deltaX = 0, dragging = false;
+
+function dragStart(x){ dragging = true; startX = x; deltaX = 0; slidesTrack.style.transition = 'none'; }
+function dragMove(x){
+  if(!dragging) return;
+  deltaX = x - startX;
+  const base = -currentIndex * viewport.clientWidth;
+  slidesTrack.style.transform = `translateX(${base + deltaX}px)`;
+}
+function dragEnd(){
+  if(!dragging) return;
+  dragging = false;
+  slidesTrack.style.transition = '';
+  const threshold = viewport.clientWidth * 0.18;
+  if(deltaX < -threshold && currentIndex < currentTutorial.slides.length - 1){
+    goToSlide(currentIndex + 1);
+  } else if(deltaX > threshold && currentIndex > 0){
+    goToSlide(currentIndex - 1);
+  } else {
+    goToSlide(currentIndex);
+  }
+}
+
+viewport.addEventListener('touchstart', e => dragStart(e.touches[0].clientX), {passive:true});
+viewport.addEventListener('touchmove', e => dragMove(e.touches[0].clientX), {passive:true});
+viewport.addEventListener('touchend', dragEnd);
+
+viewport.addEventListener('mousedown', e => { dragStart(e.clientX); e.preventDefault(); });
+window.addEventListener('mousemove', e => { if(dragging) dragMove(e.clientX); });
+window.addEventListener('mouseup', dragEnd);
+
+
+</script>
+</body>
+</html>

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — Review Tutorial iKISI</title>
+<style>
+  :root{
+    --kisi-dark:#14432c; --kisi-green:#1a5c3a; --kisi-emerald:#2ecc71;
+    --kisi-emerald-soft:#eafaf1; --ink:#14201a; --sub:#6b7d74;
+    --line:#e4ece7; --paper:#ffffff; --bg:#f4f8f5; --danger:#c0392b; --danger-soft:#fdecec;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Segoe UI',-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+  }
+  .wrap{ max-width:720px; margin:0 auto; padding:24px 16px 60px 16px; }
+  h1{ font-size:20px; margin:0 0 4px 0; }
+  .sub{ font-size:13px; color:var(--sub); margin:0 0 20px 0; }
+
+  /* ---- login ---- */
+  #login-box{ max-width:340px; margin:80px auto; text-align:center; }
+  #login-box input{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:10px;
+    font-size:13.5px; margin-top:10px; font-family:inherit;
+  }
+  #login-box button{
+    width:100%; margin-top:14px; padding:12px; border:none; border-radius:10px;
+    background:var(--kisi-green); color:#fff; font-weight:800; font-size:14px; cursor:pointer;
+  }
+  #login-error{ color:var(--danger); font-size:12.5px; margin-top:10px; min-height:16px; }
+
+  /* ---- topbar ---- */
+  .topbar{ display:flex; align-items:center; justify-content:space-between; }
+  .btn-logout{
+    border:1px solid var(--line); background:var(--paper); color:var(--sub);
+    font-size:12px; font-weight:700; padding:7px 12px; border-radius:8px; cursor:pointer;
+  }
+
+  /* ---- pending list ---- */
+  .empty-note{ color:var(--sub); font-size:13px; margin-top:30px; text-align:center; }
+  .pending-card{
+    background:var(--paper); border:1px solid var(--line); border-radius:14px;
+    padding:16px; margin-top:14px;
+  }
+  .pending-meta{ font-size:11px; color:var(--sub); margin-bottom:6px; }
+  .pending-cat{
+    display:inline-block; font-size:10.5px; font-weight:800; color:var(--kisi-green);
+    background:var(--kisi-emerald-soft); padding:3px 9px; border-radius:999px; margin-bottom:8px;
+  }
+  .pending-title{ font-size:16px; font-weight:800; margin:0 0 10px 0; }
+  .pending-steps{ list-style:none; margin:0; padding:0; }
+  .pending-steps li{
+    font-size:13px; line-height:1.55; padding:8px 10px; background:var(--bg);
+    border-radius:8px; margin-bottom:6px;
+  }
+  .pending-steps li b{ color:var(--sub); font-weight:700; margin-right:4px; }
+  .pending-actions{ display:flex; gap:10px; margin-top:12px; }
+  .btn-approve, .btn-reject{
+    flex:1; padding:11px; border:none; border-radius:10px; font-weight:800;
+    font-size:13px; cursor:pointer;
+  }
+  .btn-approve{ background:var(--kisi-green); color:#fff; }
+  .btn-reject{ background:var(--danger-soft); color:var(--danger); }
+  .btn-approve:disabled, .btn-reject:disabled{ opacity:.5; cursor:not-allowed; }
+
+  .import-box{
+    background:var(--paper); border:1px solid var(--line); border-radius:14px;
+    padding:16px; margin-top:34px;
+  }
+  .import-box h2{ font-size:15px; margin:0 0 4px 0; }
+  .import-box textarea{
+    width:100%; min-height:110px; margin-top:10px; padding:10px 12px;
+    border:1px solid var(--line); border-radius:10px; font-size:12px;
+    font-family:ui-monospace,Consolas,monospace; resize:vertical;
+  }
+  .btn-import{
+    margin-top:10px; padding:11px 16px; border:none; border-radius:10px;
+    background:var(--kisi-dark); color:#fff; font-weight:800; font-size:13px; cursor:pointer;
+  }
+  .btn-import:disabled{ opacity:.5; cursor:not-allowed; }
+  .import-status{ margin-top:10px; font-size:12.5px; line-height:1.5; }
+  .import-status.success{ color:var(--kisi-green); }
+  .import-status.error{ color:var(--danger); }
+</style>
+</head>
+<body>
+
+<div id="login-box">
+  <h1>Login Admin</h1>
+  <p class="sub">Masuk untuk mereview usulan tutorial yang masuk.</p>
+  <input type="email" id="login-email" placeholder="Email">
+  <input type="password" id="login-password" placeholder="Password">
+  <button id="btn-login">Masuk</button>
+  <div id="login-error"></div>
+</div>
+
+<div class="wrap" id="admin-panel" style="display:none;">
+  <div class="topbar">
+    <div>
+      <h1>Review Usulan Tutorial</h1>
+      <p class="sub">Usulan yang di-approve akan langsung tayang di halaman utama.</p>
+    </div>
+    <button class="btn-logout" id="btn-logout">Keluar</button>
+  </div>
+  <div id="pending-list"></div>
+
+  <div class="import-box">
+    <h2>Impor dari Generator Lama</h2>
+    <p class="sub">Cuma perlu dilakukan sekali di awal, buat mindahin tutorial yang sudah ada di file generator lama ke sini. Buka file generator, klik "📋 Salin Data (JSON) untuk Firebase", lalu tempel hasilnya di bawah ini.</p>
+    <textarea id="import-json" placeholder="Tempel hasil salinan JSON di sini..."></textarea>
+    <button id="btn-import" class="btn-import">Impor ke Firestore</button>
+    <div id="import-status" class="import-status"></div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import {
+  getFirestore, collection, query, orderBy, onSnapshot,
+  doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion
+} from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const loginBox = document.getElementById('login-box');
+const adminPanel = document.getElementById('admin-panel');
+const loginError = document.getElementById('login-error');
+const pendingListEl = document.getElementById('pending-list');
+
+document.getElementById('btn-login').onclick = async () => {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  loginError.textContent = '';
+  try{
+    await signInWithEmailAndPassword(auth, email, password);
+  }catch(err){
+    loginError.textContent = 'Email atau password salah.';
+  }
+};
+
+document.getElementById('btn-logout').onclick = () => signOut(auth);
+
+let unsubscribePending = null;
+
+onAuthStateChanged(auth, (user) => {
+  if(user){
+    loginBox.style.display = 'none';
+    adminPanel.style.display = 'block';
+    if(!unsubscribePending) listenPending();
+  }else{
+    loginBox.style.display = 'block';
+    adminPanel.style.display = 'none';
+    if(unsubscribePending){ unsubscribePending(); unsubscribePending = null; }
+  }
+});
+
+function uid(prefix){
+  return prefix + '_' + Math.random().toString(36).slice(2, 9);
+}
+
+function listenPending(){
+  const q = query(collection(db, 'pending_topics'), orderBy('createdAt', 'desc'));
+  unsubscribePending = onSnapshot(q, (snap) => {
+    pendingListEl.innerHTML = '';
+    if(snap.empty){
+      pendingListEl.innerHTML = '<p class="empty-note">Belum ada usulan yang masuk.</p>';
+      return;
+    }
+    snap.forEach(docSnap => {
+      pendingListEl.appendChild(renderPendingCard(docSnap.id, docSnap.data()));
+    });
+  });
+}
+
+function renderPendingCard(id, data){
+  const card = document.createElement('div');
+  card.className = 'pending-card';
+
+  const meta = data.submitterName
+    ? `Diusulkan oleh ${escapeHtml(data.submitterName)}`
+    : 'Diusulkan tanpa nama';
+
+  const stepsHtml = (data.steps || []).map((s, i) =>
+    `<li><b>${i + 1}.</b>${escapeHtml(s)}</li>`
+  ).join('');
+
+  card.innerHTML = `
+    <div class="pending-meta">${meta}</div>
+    <span class="pending-cat">${escapeHtml(data.categoryTitle || 'Kategori tidak diketahui')}</span>
+    <h3 class="pending-title">${escapeHtml(data.topicTitle || '(tanpa judul)')}</h3>
+    <ul class="pending-steps">${stepsHtml}</ul>
+    <div class="pending-actions">
+      <button class="btn-approve">✓ Setujui &amp; Tayangkan</button>
+      <button class="btn-reject">✕ Tolak</button>
+    </div>
+  `;
+
+  const approveBtn = card.querySelector('.btn-approve');
+  const rejectBtn = card.querySelector('.btn-reject');
+
+  approveBtn.onclick = async () => {
+    approveBtn.disabled = true; rejectBtn.disabled = true;
+    approveBtn.textContent = 'Menyimpan...';
+    try{
+      await approveSubmission(id, data);
+    }catch(err){
+      console.error(err);
+      alert('Gagal menyetujui usulan ini. Coba lagi.');
+      approveBtn.disabled = false; rejectBtn.disabled = false;
+      approveBtn.textContent = '✓ Setujui & Tayangkan';
+    }
+  };
+
+  rejectBtn.onclick = async () => {
+    if(!confirm('Tolak dan hapus usulan ini?')) return;
+    approveBtn.disabled = true; rejectBtn.disabled = true;
+    try{
+      await deleteDoc(doc(db, 'pending_topics', id));
+    }catch(err){
+      console.error(err);
+      alert('Gagal menolak usulan ini. Coba lagi.');
+      approveBtn.disabled = false; rejectBtn.disabled = false;
+    }
+  };
+
+  return card;
+}
+
+async function approveSubmission(pendingId, data){
+  const catRef = doc(db, 'categories', data.categoryId);
+  const catSnap = await getDoc(catRef);
+  if(!catSnap.exists()){
+    throw new Error('Kategori tujuan sudah tidak ada.');
+  }
+  const newTopic = {
+    id: uid('topic'),
+    title: data.topicTitle,
+    slides: (data.steps || []).map(text => ({ image: '', text }))
+  };
+  await updateDoc(catRef, {
+    items: arrayUnion(newTopic)
+  });
+  await deleteDoc(doc(db, 'pending_topics', pendingId));
+}
+
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+const importBtn = document.getElementById('btn-import');
+const importStatus = document.getElementById('import-status');
+
+importBtn.onclick = async () => {
+  const raw = document.getElementById('import-json').value.trim();
+  importStatus.className = 'import-status';
+  importStatus.textContent = '';
+
+  let parsed;
+  try{
+    parsed = JSON.parse(raw);
+    if(!Array.isArray(parsed)) throw new Error('bukan array');
+  }catch(e){
+    importStatus.className = 'import-status error';
+    importStatus.textContent = 'JSON tidak valid. Pastikan kamu menyalin seluruh teks dari tombol "Salin Data (JSON)".';
+    return;
+  }
+
+  if(!confirm(`Impor ${parsed.length} kategori ke Firestore? Ini akan MENIMPA kategori yang judulnya sama persis.`)) return;
+
+  importBtn.disabled = true;
+  importBtn.textContent = 'Mengimpor...';
+  try{
+    for(let i = 0; i < parsed.length; i++){
+      const cat = parsed[i];
+      await setDoc(doc(db, 'categories', cat.id || uid('cat')), {
+        order: i,
+        title: cat.title || '',
+        icon: cat.icon || '📁',
+        tint: cat.tint || '#eafaf1',
+        desc: cat.desc || '',
+        items: cat.items || []
+      });
+    }
+    importStatus.className = 'import-status success';
+    importStatus.textContent = `Berhasil mengimpor ${parsed.length} kategori. Cek halaman utama untuk memastikan.`;
+    document.getElementById('import-json').value = '';
+  }catch(err){
+    console.error(err);
+    importStatus.className = 'import-status error';
+    importStatus.textContent = 'Gagal mengimpor sebagian/seluruh data. Coba lagi.';
+  }finally{
+    importBtn.disabled = false;
+    importBtn.textContent = 'Impor ke Firestore';
+  }
+};
+</script>
+</body>
+</html>

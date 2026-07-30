@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usul Tutorial Baru — iKISI</title>
+<style>
+  :root{
+    --kisi-dark:#14432c; --kisi-green:#1a5c3a; --kisi-emerald:#2ecc71;
+    --kisi-emerald-soft:#eafaf1; --ink:#14201a; --sub:#6b7d74;
+    --line:#e4ece7; --paper:#ffffff; --bg:#f4f8f5; --danger:#c0392b; --danger-soft:#fdecec;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Segoe UI',-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink); padding:24px 16px 60px 16px;
+  }
+  .wrap{ max-width:480px; margin:0 auto; }
+  a.back-link{ color:var(--sub); font-size:13px; text-decoration:none; }
+  h1{ font-size:20px; margin:14px 0 4px 0; }
+  .sub{ font-size:13px; color:var(--sub); margin:0 0 20px 0; line-height:1.5; }
+  label{ display:block; font-size:12.5px; font-weight:700; color:var(--ink); margin:16px 0 6px 0; }
+  select, input[type="text"], textarea{
+    width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px;
+    font-size:13.5px; font-family:inherit; background:var(--paper); color:var(--ink);
+  }
+  textarea{ min-height:60px; resize:vertical; }
+  .hint{ font-size:11px; color:var(--sub); margin-top:4px; }
+  .step-card{
+    border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:10px;
+    background:var(--paper);
+  }
+  .step-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .step-head span{ font-size:12px; font-weight:800; color:var(--kisi-green); }
+  .btn-remove-step{
+    border:none; background:var(--danger-soft); color:var(--danger); font-size:11px;
+    font-weight:700; padding:4px 9px; border-radius:8px; cursor:pointer;
+  }
+  .btn-add-step{
+    width:100%; margin-top:12px; padding:11px; border:1px dashed var(--kisi-green);
+    background:var(--kisi-emerald-soft); color:var(--kisi-green); font-weight:800;
+    font-size:13px; border-radius:12px; cursor:pointer;
+  }
+  .btn-submit{
+    width:100%; margin-top:22px; padding:14px; border:none; border-radius:12px;
+    background:var(--kisi-green); color:#fff; font-weight:800; font-size:14px; cursor:pointer;
+  }
+  .btn-submit:disabled{ opacity:.5; cursor:not-allowed; }
+  .status-msg{
+    margin-top:14px; padding:12px; border-radius:10px; font-size:13px; line-height:1.5; display:none;
+  }
+  .status-msg.success{ display:block; background:var(--kisi-emerald-soft); color:var(--kisi-green); }
+  .status-msg.error{ display:block; background:var(--danger-soft); color:var(--danger); }
+  .note-box{
+    background:var(--paper); border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px; font-size:12px; color:var(--sub); line-height:1.6; margin-top:24px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back-link" href="index.html">‹ Kembali ke Tutorial</a>
+  <h1>Usul Tutorial Baru</h1>
+  <p class="sub">Isi form di bawah untuk mengusulkan tutorial baru. Usulan kamu akan direview dulu oleh admin sebelum tayang ke semua orang.</p>
+
+  <form id="submit-form">
+    <label for="cat-select">Kategori tujuan</label>
+    <select id="cat-select" required>
+      <option value="" disabled selected>Memuat daftar kategori...</option>
+    </select>
+
+    <label for="topic-title">Judul tutorial</label>
+    <input type="text" id="topic-title" placeholder="Contoh: Cara Beli Reksa Dana" required>
+
+    <label for="submitter-name">Nama kamu <span style="font-weight:400; color:var(--sub);">(opsional)</span></label>
+    <input type="text" id="submitter-name" placeholder="Boleh dikosongkan">
+
+    <label style="margin-bottom:0;">Langkah-langkah</label>
+    <p class="hint">Tulis satu langkah per kotak. Bisa pakai **kata** untuk menebalkan bagian tertentu.</p>
+    <div id="steps-list"></div>
+    <button type="button" class="btn-add-step" id="btn-add-step">+ Tambah Langkah</button>
+
+    <button type="submit" class="btn-submit" id="btn-submit">Kirim Usulan</button>
+    <div class="status-msg" id="status-msg"></div>
+  </form>
+
+  <div class="note-box">
+    Catatan: usulan lewat form ini belum bisa menyertakan gambar screenshot. Kalau tutorial kamu disetujui, admin bisa menambahkan gambar belakangan sebelum ditayangkan.
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+import { getFirestore, collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const catSelect = document.getElementById('cat-select');
+const stepsList = document.getElementById('steps-list');
+const form = document.getElementById('submit-form');
+const btnSubmit = document.getElementById('btn-submit');
+const statusMsg = document.getElementById('status-msg');
+
+let categoriesCache = [];
+
+onSnapshot(query(collection(db, 'categories'), orderBy('order')), (snap) => {
+  categoriesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const current = catSelect.value;
+  catSelect.innerHTML = '';
+  if(categoriesCache.length === 0){
+    catSelect.innerHTML = '<option value="" disabled selected>Belum ada kategori tersedia</option>';
+    return;
+  }
+  categoriesCache.forEach(cat => {
+    const opt = document.createElement('option');
+    opt.value = cat.id;
+    opt.textContent = cat.title;
+    catSelect.appendChild(opt);
+  });
+  if(current) catSelect.value = current;
+}, (err) => {
+  catSelect.innerHTML = '<option value="" disabled selected>Gagal memuat kategori</option>';
+  console.error(err);
+});
+
+function addStepField(value = ''){
+  const card = document.createElement('div');
+  card.className = 'step-card';
+  const n = stepsList.children.length + 1;
+  card.innerHTML = `
+    <div class="step-head">
+      <span>Langkah ${n}</span>
+      <button type="button" class="btn-remove-step">Hapus</button>
+    </div>
+    <textarea placeholder="Jelaskan langkah ini..." required></textarea>
+  `;
+  card.querySelector('textarea').value = value;
+  card.querySelector('.btn-remove-step').onclick = () => {
+    card.remove();
+    renumberSteps();
+  };
+  stepsList.appendChild(card);
+}
+
+function renumberSteps(){
+  [...stepsList.children].forEach((card, i) => {
+    card.querySelector('.step-head span').textContent = `Langkah ${i + 1}`;
+  });
+}
+
+document.getElementById('btn-add-step').onclick = () => addStepField();
+// Mulai dengan 2 kotak langkah kosong biar tidak bingung harus mulai dari mana.
+addStepField();
+addStepField();
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  statusMsg.className = 'status-msg';
+  statusMsg.textContent = '';
+
+  const categoryId = catSelect.value;
+  const category = categoriesCache.find(c => c.id === categoryId);
+  const topicTitle = document.getElementById('topic-title').value.trim();
+  const submitterName = document.getElementById('submitter-name').value.trim();
+  const steps = [...stepsList.querySelectorAll('textarea')]
+    .map(t => t.value.trim())
+    .filter(Boolean);
+
+  if(!category){
+    statusMsg.className = 'status-msg error';
+    statusMsg.textContent = 'Pilih kategori tujuan dulu ya.';
+    return;
+  }
+  if(!topicTitle){
+    statusMsg.className = 'status-msg error';
+    statusMsg.textContent = 'Judul tutorial belum diisi.';
+    return;
+  }
+  if(steps.length === 0){
+    statusMsg.className = 'status-msg error';
+    statusMsg.textContent = 'Isi minimal 1 langkah tutorial.';
+    return;
+  }
+
+  btnSubmit.disabled = true;
+  btnSubmit.textContent = 'Mengirim...';
+
+  try{
+    await addDoc(collection(db, 'pending_topics'), {
+      categoryId,
+      categoryTitle: category.title,
+      topicTitle,
+      steps,
+      submitterName: submitterName || null,
+      status: 'pending',
+      createdAt: serverTimestamp()
+    });
+    statusMsg.className = 'status-msg success';
+    statusMsg.textContent = 'Terima kasih! Usulan kamu sudah terkirim dan akan direview admin.';
+    form.reset();
+    stepsList.innerHTML = '';
+    addStepField();
+    addStepField();
+  }catch(err){
+    console.error(err);
+    statusMsg.className = 'status-msg error';
+    statusMsg.textContent = 'Gagal mengirim usulan. Coba lagi sebentar lagi.';
+  }finally{
+    btnSubmit.disabled = false;
+    btnSubmit.textContent = 'Kirim Usulan';
+  }
+});
+</script>
+</body>
+</html>
