@@ -71,12 +71,20 @@
     background:var(--bg); border-radius:8px; padding:6px;
   }
   .step-image-preview img{
-    width:52px; height:52px; object-fit:cover; border-radius:6px; border:1px solid var(--line);
+    width:64px; height:64px; object-fit:cover; border-radius:6px; border:1px solid var(--line);
+    cursor:zoom-in;
   }
+  .step-image-preview .hint{ margin:0; flex:1; }
   .btn-remove-image{
     border:none; background:var(--danger-soft); color:var(--danger); font-size:11px;
     font-weight:700; padding:5px 10px; border-radius:8px; cursor:pointer;
   }
+  .img-modal{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.85);
+    z-index:999; align-items:center; justify-content:center; padding:24px; cursor:zoom-out;
+  }
+  .img-modal.open{ display:flex; }
+  .img-modal img{ max-width:100%; max-height:100%; border-radius:8px; }
 </style>
 </head>
 <body>
@@ -111,6 +119,10 @@
   </div>
 </div>
 
+<div id="img-modal" class="img-modal">
+  <img id="img-modal-img" alt="Preview gambar diperbesar">
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getFirestore, collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
@@ -125,6 +137,19 @@ const stepsList = document.getElementById('steps-list');
 const form = document.getElementById('submit-form');
 const btnSubmit = document.getElementById('btn-submit');
 const statusMsg = document.getElementById('status-msg');
+
+const imgModal = document.getElementById('img-modal');
+const imgModalImg = document.getElementById('img-modal-img');
+document.addEventListener('click', (e) => {
+  const img = e.target.closest('.step-preview-img');
+  if(!img) return;
+  imgModalImg.src = img.dataset.full;
+  imgModal.classList.add('open');
+});
+imgModal.addEventListener('click', () => {
+  imgModal.classList.remove('open');
+  imgModalImg.src = '';
+});
 
 let categoriesCache = [];
 
@@ -177,7 +202,8 @@ function addStepField(value = ''){
     <p class="hint" style="margin-top:4px;">Ukuran gambar disarankan 810 x 1320 px (potret) biar pas tampilannya.</p>
     <div class="step-image-status"></div>
     <div class="step-image-preview" style="display:none;">
-      <img alt="preview">
+      <img alt="preview" class="step-preview-img">
+      <p class="hint">Klik gambar untuk lihat lebih besar &amp; pastikan sudah sesuai.</p>
       <button type="button" class="btn-remove-image">Hapus gambar</button>
     </div>
     <textarea placeholder="Jelaskan langkah ini..." required style="margin-top:8px;"></textarea>
@@ -198,6 +224,7 @@ function addStepField(value = ''){
       const url = await uploadToImgbb(file);
       card.dataset.imageUrl = url;
       previewImg.src = url;
+      previewImg.dataset.full = url;
       previewBox.style.display = 'flex';
       fileInput.style.display = 'none';
       statusEl.className = 'step-image-status success';
