@@ -57,8 +57,14 @@
   }
   .pending-step-img{
     width:44px; height:44px; border-radius:8px; object-fit:cover; flex:0 0 auto;
-    border:1px solid var(--line); background:var(--paper);
+    border:1px solid var(--line); background:var(--paper); cursor:zoom-in;
   }
+  .img-modal{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.85);
+    z-index:999; align-items:center; justify-content:center; padding:24px; cursor:zoom-out;
+  }
+  .img-modal.open{ display:flex; }
+  .img-modal img{ max-width:100%; max-height:100%; border-radius:8px; }
   .pending-steps li b{ color:var(--sub); font-weight:700; margin-right:4px; }
   .pending-step-title{ display:block; color:var(--ink) !important; font-size:13.5px; margin-bottom:2px; }
   .pending-actions{ display:flex; gap:10px; margin-top:12px; }
@@ -150,6 +156,10 @@
   </div>
 </div>
 
+<div id="img-modal" class="img-modal">
+  <img id="img-modal-img" alt="Preview gambar diperbesar">
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import {
@@ -233,7 +243,7 @@ function renderPendingCard(id, data){
     const body = isSimple ? s : (s.text !== undefined ? s.text : (s.desc || ''));
     const image = isSimple ? '' : (s.image || '');
     const imgHtml = image
-      ? `<img src="${escapeHtml(image)}" alt="Langkah ${i + 1}" class="pending-step-img" onerror="this.style.display='none'">`
+      ? `<img src="${escapeHtml(image)}" alt="Langkah ${i + 1}" class="pending-step-img" data-full="${escapeHtml(image)}" onerror="this.style.display='none'">`
       : '';
     const titleHtml = title ? `<b class="pending-step-title">${escapeHtml(title)}</b>` : '';
     return `<li>${imgHtml}<div><b>${i + 1}.</b>${titleHtml}${escapeHtml(body)}</div></li>`;
@@ -311,6 +321,22 @@ function escapeHtml(str){
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 }
+
+/* ---------- lightbox buat lihat gambar diperbesar ---------- */
+const imgModal = document.getElementById('img-modal');
+const imgModalImg = document.getElementById('img-modal-img');
+
+pendingListEl.addEventListener('click', (e) => {
+  const img = e.target.closest('.pending-step-img');
+  if(!img) return;
+  imgModalImg.src = img.dataset.full;
+  imgModal.classList.add('open');
+});
+
+imgModal.addEventListener('click', () => {
+  imgModal.classList.remove('open');
+  imgModalImg.src = '';
+});
 
 /* ---------- kelola kategori & topik yang sudah tayang ---------- */
 function listenCategories(){
