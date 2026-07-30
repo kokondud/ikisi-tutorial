@@ -109,9 +109,12 @@
     font-weight:700; padding:5px 10px; border-radius:8px; cursor:pointer;
   }
   .manage-topic-list{ list-style:none; margin:10px 0 0 0; padding:0; }
-  .manage-topic-list li{
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
-    font-size:13px; padding:8px 10px; background:var(--bg); border-radius:8px; margin-bottom:6px;
+  .manage-topic-row{ background:var(--bg); border-radius:8px; margin-bottom:6px; padding:8px 10px; }
+  .manage-topic-row-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; }
+  .manage-topic-detail{ margin-top:8px; padding:0; }
+  .btn-view-topic{
+    border:1px solid var(--line); background:var(--paper); color:var(--kisi-green); font-size:11px;
+    font-weight:700; padding:4px 9px; border-radius:8px; cursor:pointer; flex:0 0 auto;
   }
   .btn-delete-topic{
     border:none; background:var(--danger-soft); color:var(--danger); font-size:11px;
@@ -326,7 +329,7 @@ function escapeHtml(str){
 const imgModal = document.getElementById('img-modal');
 const imgModalImg = document.getElementById('img-modal-img');
 
-pendingListEl.addEventListener('click', (e) => {
+document.addEventListener('click', (e) => {
   const img = e.target.closest('.pending-step-img');
   if(!img) return;
   imgModalImg.src = img.dataset.full;
@@ -353,16 +356,37 @@ function listenCategories(){
   });
 }
 
+function renderSlideDetailHtml(slide, i){
+  const image = slide.image || '';
+  const title = slide.title || '';
+  const body = slide.text !== undefined ? slide.text : (slide.desc || '');
+  const imgHtml = image
+    ? `<img src="${escapeHtml(image)}" alt="Langkah ${i + 1}" class="pending-step-img" data-full="${escapeHtml(image)}" onerror="this.style.display='none'">`
+    : '';
+  const titleHtml = title ? `<b class="pending-step-title">${escapeHtml(title)}</b>` : '';
+  return `<li>${imgHtml}<div><b>${i + 1}.</b>${titleHtml}${escapeHtml(body)}</div></li>`;
+}
+
 function renderManageCategory(catId, cat){
   const box = document.createElement('div');
   box.className = 'manage-cat';
 
   const items = cat.items || [];
   const topicsHtml = items.length
-    ? items.map(it =>
-        `<li><span>${escapeHtml(it.title || '(tanpa judul)')} <span style="color:var(--sub);">(${(it.slides || []).length} langkah)</span></span>
-         <button class="btn-delete-topic" data-topic-id="${escapeHtml(it.id)}">Hapus</button></li>`
-      ).join('')
+    ? items.map(it => `
+        <li class="manage-topic-row">
+          <div class="manage-topic-row-head">
+            <span>${escapeHtml(it.title || '(tanpa judul)')} <span style="color:var(--sub);">(${(it.slides || []).length} langkah)</span></span>
+            <div style="display:flex; gap:6px;">
+              <button class="btn-view-topic" data-topic-id="${escapeHtml(it.id)}">Lihat</button>
+              <button class="btn-delete-topic" data-topic-id="${escapeHtml(it.id)}">Hapus</button>
+            </div>
+          </div>
+          <ul class="pending-steps manage-topic-detail" data-topic-id="${escapeHtml(it.id)}" style="display:none;">
+            ${(it.slides || []).map((s, i) => renderSlideDetailHtml(s, i)).join('')}
+          </ul>
+        </li>
+      `).join('')
     : '<div class="manage-empty-topics">Belum ada topik di kategori ini.</div>';
 
   box.innerHTML = `
@@ -382,6 +406,16 @@ function renderManageCategory(catId, cat){
       alert('Gagal menghapus kategori.');
     }
   };
+
+  box.querySelectorAll('.btn-view-topic').forEach(btn => {
+    btn.onclick = () => {
+      const topicId = btn.dataset.topicId;
+      const detail = box.querySelector(`.manage-topic-detail[data-topic-id="${CSS.escape(topicId)}"]`);
+      const isOpen = detail.style.display !== 'none';
+      detail.style.display = isOpen ? 'none' : 'block';
+      btn.textContent = isOpen ? 'Lihat' : 'Sembunyikan';
+    };
+  });
 
   box.querySelectorAll('.btn-delete-topic').forEach(btn => {
     btn.onclick = async () => {
