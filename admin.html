@@ -60,6 +60,7 @@
     border:1px solid var(--line); background:var(--paper);
   }
   .pending-steps li b{ color:var(--sub); font-weight:700; margin-right:4px; }
+  .pending-step-title{ display:block; color:var(--ink) !important; font-size:13.5px; margin-bottom:2px; }
   .pending-actions{ display:flex; gap:10px; margin-top:12px; }
   .btn-approve, .btn-reject{
     flex:1; padding:11px; border:none; border-radius:10px; font-weight:800;
@@ -87,6 +88,30 @@
   .import-status{ margin-top:10px; font-size:12.5px; line-height:1.5; }
   .import-status.success{ color:var(--kisi-green); }
   .import-status.error{ color:var(--danger); }
+
+  .manage-section{ margin-top:34px; }
+  .manage-section h2{ font-size:15px; margin:0 0 4px 0; }
+  .manage-cat{
+    background:var(--paper); border:1px solid var(--line); border-radius:14px;
+    padding:14px 16px; margin-top:12px;
+  }
+  .manage-cat-head{ display:flex; align-items:center; justify-content:space-between; }
+  .manage-cat-title{ font-size:14.5px; font-weight:800; display:flex; align-items:center; gap:8px; }
+  .manage-cat-icon{ font-size:18px; }
+  .btn-delete-cat{
+    border:none; background:var(--danger-soft); color:var(--danger); font-size:11px;
+    font-weight:700; padding:5px 10px; border-radius:8px; cursor:pointer;
+  }
+  .manage-topic-list{ list-style:none; margin:10px 0 0 0; padding:0; }
+  .manage-topic-list li{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    font-size:13px; padding:8px 10px; background:var(--bg); border-radius:8px; margin-bottom:6px;
+  }
+  .btn-delete-topic{
+    border:none; background:var(--danger-soft); color:var(--danger); font-size:11px;
+    font-weight:700; padding:4px 9px; border-radius:8px; cursor:pointer; flex:0 0 auto;
+  }
+  .manage-empty-topics{ font-size:12px; color:var(--sub); margin-top:8px; }
 </style>
 </head>
 <body>
@@ -109,6 +134,12 @@
     <button class="btn-logout" id="btn-logout">Keluar</button>
   </div>
   <div id="pending-list"></div>
+
+  <div class="manage-section">
+    <h2>Kelola Tutorial yang Tayang</h2>
+    <p class="sub">Hapus topik atau kategori yang sudah live di halaman utama.</p>
+    <div id="manage-list"></div>
+  </div>
 
   <div class="import-box">
     <h2>Impor dari Generator Lama</h2>
@@ -138,6 +169,7 @@ const loginBox = document.getElementById('login-box');
 const adminPanel = document.getElementById('admin-panel');
 const loginError = document.getElementById('login-error');
 const pendingListEl = document.getElementById('pending-list');
+const manageListEl = document.getElementById('manage-list');
 
 document.getElementById('btn-login').onclick = async () => {
   const email = document.getElementById('login-email').value.trim();
@@ -153,16 +185,19 @@ document.getElementById('btn-login').onclick = async () => {
 document.getElementById('btn-logout').onclick = () => signOut(auth);
 
 let unsubscribePending = null;
+let unsubscribeCategories = null;
 
 onAuthStateChanged(auth, (user) => {
   if(user){
     loginBox.style.display = 'none';
     adminPanel.style.display = 'block';
     if(!unsubscribePending) listenPending();
+    if(!unsubscribeCategories) listenCategories();
   }else{
     loginBox.style.display = 'block';
     adminPanel.style.display = 'none';
     if(unsubscribePending){ unsubscribePending(); unsubscribePending = null; }
+    if(unsubscribeCategories){ unsubscribeCategories(); unsubscribeCategories = null; }
   }
 });
 
@@ -193,12 +228,15 @@ function renderPendingCard(id, data){
     : 'Diusulkan tanpa nama';
 
   const stepsHtml = (data.steps || []).map((s, i) => {
-    const text = typeof s === 'string' ? s : s.text;
-    const image = typeof s === 'string' ? '' : (s.image || '');
+    const isSimple = typeof s === 'string';
+    const title = isSimple ? '' : (s.title || '');
+    const body = isSimple ? s : (s.text !== undefined ? s.text : (s.desc || ''));
+    const image = isSimple ? '' : (s.image || '');
     const imgHtml = image
       ? `<img src="${escapeHtml(image)}" alt="Langkah ${i + 1}" class="pending-step-img" onerror="this.style.display='none'">`
       : '';
-    return `<li>${imgHtml}<div><b>${i + 1}.</b>${escapeHtml(text)}</div></li>`;
+    const titleHtml = title ? `<b class="pending-step-title">${escapeHtml(title)}</b>` : '';
+    return `<li>${imgHtml}<div><b>${i + 1}.</b>${titleHtml}${escapeHtml(body)}</div></li>`;
   }).join('');
 
   card.innerHTML = `
@@ -252,9 +290,14 @@ async function approveSubmission(pendingId, data){
   const newTopic = {
     id: uid('topic'),
     title: data.topicTitle,
-    slides: (data.steps || []).map(s =>
-      typeof s === 'string' ? { image: '', text: s } : { image: s.image || '', text: s.text }
-    )
+    slides: (data.steps || []).map(s => {
+      if(typeof s === 'string') return { image: '', text: s };
+      const title = (s.title || '').trim();
+      if(title){
+        return { image: s.image || '', title, desc: s.desc !== undefined ? s.desc : (s.text || '') };
+      }
+      return { image: s.image || '', text: s.text !== undefined ? s.text : (s.desc || '') };
+    })
   };
   await updateDoc(catRef, {
     items: arrayUnion(newTopic)
@@ -267,6 +310,72 @@ function escapeHtml(str){
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+/* ---------- kelola kategori & topik yang sudah tayang ---------- */
+function listenCategories(){
+  const q = query(collection(db, 'categories'), orderBy('order'));
+  unsubscribeCategories = onSnapshot(q, (snap) => {
+    manageListEl.innerHTML = '';
+    if(snap.empty){
+      manageListEl.innerHTML = '<p class="empty-note">Belum ada kategori tersedia.</p>';
+      return;
+    }
+    snap.forEach(docSnap => {
+      manageListEl.appendChild(renderManageCategory(docSnap.id, docSnap.data()));
+    });
+  });
+}
+
+function renderManageCategory(catId, cat){
+  const box = document.createElement('div');
+  box.className = 'manage-cat';
+
+  const items = cat.items || [];
+  const topicsHtml = items.length
+    ? items.map(it =>
+        `<li><span>${escapeHtml(it.title || '(tanpa judul)')} <span style="color:var(--sub);">(${(it.slides || []).length} langkah)</span></span>
+         <button class="btn-delete-topic" data-topic-id="${escapeHtml(it.id)}">Hapus</button></li>`
+      ).join('')
+    : '<div class="manage-empty-topics">Belum ada topik di kategori ini.</div>';
+
+  box.innerHTML = `
+    <div class="manage-cat-head">
+      <div class="manage-cat-title"><span class="manage-cat-icon">${escapeHtml(cat.icon || '📁')}</span>${escapeHtml(cat.title || '(tanpa judul)')}</div>
+      <button class="btn-delete-cat">Hapus Kategori</button>
+    </div>
+    <ul class="manage-topic-list">${topicsHtml}</ul>
+  `;
+
+  box.querySelector('.btn-delete-cat').onclick = async () => {
+    if(!confirm(`Hapus kategori "${cat.title}" beserta SEMUA topik di dalamnya? Tindakan ini tidak bisa dibatalkan.`)) return;
+    try{
+      await deleteDoc(doc(db, 'categories', catId));
+    }catch(err){
+      console.error(err);
+      alert('Gagal menghapus kategori.');
+    }
+  };
+
+  box.querySelectorAll('.btn-delete-topic').forEach(btn => {
+    btn.onclick = async () => {
+      const topicId = btn.dataset.topicId;
+      const topic = items.find(it => it.id === topicId);
+      if(!confirm(`Hapus topik "${topic?.title || 'ini'}"?`)) return;
+      try{
+        const catRef = doc(db, 'categories', catId);
+        const freshSnap = await getDoc(catRef);
+        if(!freshSnap.exists()) return;
+        const freshItems = (freshSnap.data().items || []).filter(it => it.id !== topicId);
+        await updateDoc(catRef, { items: freshItems });
+      }catch(err){
+        console.error(err);
+        alert('Gagal menghapus topik.');
+      }
+    };
+  });
+
+  return box;
 }
 
 const importBtn = document.getElementById('btn-import');

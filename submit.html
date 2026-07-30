@@ -98,7 +98,7 @@
     <input type="text" id="submitter-name" placeholder="Boleh dikosongkan">
 
     <label style="margin-bottom:0;">Langkah-langkah</label>
-    <p class="hint">Tulis satu langkah per kotak. Boleh lampirkan foto/screenshot (opsional). Bisa pakai **kata** untuk menebalkan bagian tertentu.</p>
+    <p class="hint">Judul langkah opsional. Tulis satu langkah per kotak. Boleh lampirkan foto/screenshot (opsional). Bisa pakai **kata** untuk menebalkan bagian tertentu.</p>
     <div id="steps-list"></div>
     <button type="button" class="btn-add-step" id="btn-add-step">+ Tambah Langkah</button>
 
@@ -172,6 +172,7 @@ function addStepField(value = ''){
       <span>Langkah ${n}</span>
       <button type="button" class="btn-remove-step">Hapus</button>
     </div>
+    <input type="text" class="step-title-input" placeholder="Judul langkah (opsional)" style="margin-bottom:8px;">
     <input type="file" class="step-image-file" accept="image/*">
     <div class="step-image-status"></div>
     <div class="step-image-preview" style="display:none;">
@@ -255,11 +256,16 @@ form.addEventListener('submit', async (e) => {
   }
 
   const steps = [...stepsList.children]
-    .map(card => ({
-      image: card.dataset.imageUrl || '',
-      text: card.querySelector('textarea').value.trim()
-    }))
-    .filter(s => s.text);
+    .map(card => {
+      const image = card.dataset.imageUrl || '';
+      const title = card.querySelector('.step-title-input').value.trim();
+      const body = card.querySelector('textarea').value.trim();
+      if(title){
+        return { image, title, desc: body };
+      }
+      return { image, text: body };
+    })
+    .filter(s => (s.text || s.desc));
 
   if(!category){
     statusMsg.className = 'status-msg error';
