@@ -55,6 +55,28 @@
     background:var(--paper); border:1px solid var(--line); border-radius:12px;
     padding:12px 14px; font-size:12px; color:var(--sub); line-height:1.6; margin-top:24px;
   }
+  .note-box code{
+    background:var(--bg); padding:2px 5px; border-radius:5px; font-size:11px;
+    color:var(--ink); word-break:break-all;
+  }
+  .step-image-file{
+    font-size:12px; padding:8px; border:1px dashed var(--line); border-radius:8px;
+    background:var(--bg); cursor:pointer;
+  }
+  .step-image-status{ font-size:11.5px; color:var(--sub); margin-top:5px; min-height:14px; }
+  .step-image-status.error{ color:var(--danger); }
+  .step-image-status.success{ color:var(--kisi-green); }
+  .step-image-preview{
+    display:flex; align-items:center; gap:10px; margin-top:8px;
+    background:var(--bg); border-radius:8px; padding:6px;
+  }
+  .step-image-preview img{
+    width:52px; height:52px; object-fit:cover; border-radius:6px; border:1px solid var(--line);
+  }
+  .btn-remove-image{
+    border:none; background:var(--danger-soft); color:var(--danger); font-size:11px;
+    font-weight:700; padding:5px 10px; border-radius:8px; cursor:pointer;
+  }
 </style>
 </head>
 <body>
@@ -76,7 +98,7 @@
     <input type="text" id="submitter-name" placeholder="Boleh dikosongkan">
 
     <label style="margin-bottom:0;">Langkah-langkah</label>
-    <p class="hint">Tulis satu langkah per kotak. Bisa pakai **kata** untuk menebalkan bagian tertentu.</p>
+    <p class="hint">Tulis satu langkah per kotak. Boleh lampirkan foto/screenshot (opsional). Bisa pakai **kata** untuk menebalkan bagian tertentu.</p>
     <div id="steps-list"></div>
     <button type="button" class="btn-add-step" id="btn-add-step">+ Tambah Langkah</button>
 
@@ -85,7 +107,7 @@
   </form>
 
   <div class="note-box">
-    Catatan: usulan lewat form ini belum bisa menyertakan gambar screenshot. Kalau tutorial kamu disetujui, admin bisa menambahkan gambar belakangan sebelum ditayangkan.
+    Foto/screenshot yang kamu lampirkan akan otomatis diupload saat dipilih. Format JPG/PNG, ukuran bebas (disarankan di bawah 5MB biar cepat).
   </div>
 </div>
 
@@ -93,6 +115,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getFirestore, collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
+import { IMGBB_API_KEY } from "./imgbb-config.js";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -125,18 +148,76 @@ onSnapshot(query(collection(db, 'categories'), orderBy('order')), (snap) => {
   console.error(err);
 });
 
+async function uploadToImgbb(file){
+  const formData = new FormData();
+  formData.append('image', file);
+  const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+    method: 'POST',
+    body: formData
+  });
+  const data = await res.json();
+  if(!data.success){
+    throw new Error(data.error?.message || 'Upload gagal');
+  }
+  return data.data.url;
+}
+
 function addStepField(value = ''){
   const card = document.createElement('div');
   card.className = 'step-card';
+  card.dataset.imageUrl = '';
   const n = stepsList.children.length + 1;
   card.innerHTML = `
     <div class="step-head">
       <span>Langkah ${n}</span>
       <button type="button" class="btn-remove-step">Hapus</button>
     </div>
-    <textarea placeholder="Jelaskan langkah ini..." required></textarea>
+    <input type="file" class="step-image-file" accept="image/*">
+    <div class="step-image-status"></div>
+    <div class="step-image-preview" style="display:none;">
+      <img alt="preview">
+      <button type="button" class="btn-remove-image">Hapus gambar</button>
+    </div>
+    <textarea placeholder="Jelaskan langkah ini..." required style="margin-top:8px;"></textarea>
   `;
   card.querySelector('textarea').value = value;
+
+  const fileInput = card.querySelector('.step-image-file');
+  const statusEl = card.querySelector('.step-image-status');
+  const previewBox = card.querySelector('.step-image-preview');
+  const previewImg = previewBox.querySelector('img');
+
+  fileInput.onchange = async () => {
+    const file = fileInput.files[0];
+    if(!file) return;
+    statusEl.className = 'step-image-status';
+    statusEl.textContent = 'Mengupload gambar...';
+    try{
+      const url = await uploadToImgbb(file);
+      card.dataset.imageUrl = url;
+      previewImg.src = url;
+      previewBox.style.display = 'flex';
+      fileInput.style.display = 'none';
+      statusEl.className = 'step-image-status success';
+      statusEl.textContent = 'Gambar berhasil diupload.';
+    }catch(err){
+      console.error(err);
+      statusEl.className = 'step-image-status error';
+      statusEl.textContent = 'Gagal upload gambar, coba lagi.';
+      fileInput.value = '';
+    }
+  };
+
+  card.querySelector('.btn-remove-image').onclick = () => {
+    card.dataset.imageUrl = '';
+    previewBox.style.display = 'none';
+    previewImg.src = '';
+    fileInput.value = '';
+    fileInput.style.display = 'block';
+    statusEl.className = 'step-image-status';
+    statusEl.textContent = '';
+  };
+
   card.querySelector('.btn-remove-step').onclick = () => {
     card.remove();
     renumberSteps();
@@ -164,9 +245,21 @@ form.addEventListener('submit', async (e) => {
   const category = categoriesCache.find(c => c.id === categoryId);
   const topicTitle = document.getElementById('topic-title').value.trim();
   const submitterName = document.getElementById('submitter-name').value.trim();
-  const steps = [...stepsList.querySelectorAll('textarea')]
-    .map(t => t.value.trim())
-    .filter(Boolean);
+  const stillUploading = [...stepsList.children].some(
+    card => card.querySelector('.step-image-status').textContent === 'Mengupload gambar...'
+  );
+  if(stillUploading){
+    statusMsg.className = 'status-msg error';
+    statusMsg.textContent = 'Tunggu sampai semua gambar selesai diupload dulu ya.';
+    return;
+  }
+
+  const steps = [...stepsList.children]
+    .map(card => ({
+      image: card.dataset.imageUrl || '',
+      text: card.querySelector('textarea').value.trim()
+    }))
+    .filter(s => s.text);
 
   if(!category){
     statusMsg.className = 'status-msg error';
