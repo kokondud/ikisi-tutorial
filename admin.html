@@ -116,6 +116,11 @@
     border:1px solid var(--line); background:var(--paper); color:var(--kisi-green); font-size:11px;
     font-weight:700; padding:4px 9px; border-radius:8px; cursor:pointer; flex:0 0 auto;
   }
+  .btn-move-cat, .btn-move-topic{
+    border:1px solid var(--line); background:var(--paper); color:var(--ink); font-size:12px;
+    font-weight:700; width:26px; height:26px; border-radius:8px; cursor:pointer; flex:0 0 auto;
+  }
+  .btn-move-cat:disabled, .btn-move-topic:disabled{ opacity:.3; cursor:not-allowed; }
   .btn-delete-topic{
     border:none; background:var(--danger-soft); color:var(--danger); font-size:11px;
     font-weight:700; padding:4px 9px; border-radius:8px; cursor:pointer; flex:0 0 auto;
@@ -350,8 +355,9 @@ function listenCategories(){
       manageListEl.innerHTML = '<p class="empty-note">Belum ada kategori tersedia.</p>';
       return;
     }
-    snap.forEach(docSnap => {
-      manageListEl.appendChild(renderManageCategory(docSnap.id, docSnap.data()));
+    const docs = snap.docs;
+    docs.forEach((docSnap, index) => {
+      manageListEl.appendChild(renderManageCategory(docSnap.id, docSnap.data(), index, docs));
     });
   });
 }
@@ -367,17 +373,19 @@ function renderSlideDetailHtml(slide, i){
   return `<li>${imgHtml}<div><b>${i + 1}.</b>${titleHtml}${escapeHtml(body)}</div></li>`;
 }
 
-function renderManageCategory(catId, cat){
+function renderManageCategory(catId, cat, index, allDocs){
   const box = document.createElement('div');
   box.className = 'manage-cat';
 
   const items = cat.items || [];
   const topicsHtml = items.length
-    ? items.map(it => `
+    ? items.map((it, ti) => `
         <li class="manage-topic-row">
           <div class="manage-topic-row-head">
             <span>${escapeHtml(it.title || '(tanpa judul)')} <span style="color:var(--sub);">(${(it.slides || []).length} langkah)</span></span>
             <div style="display:flex; gap:6px;">
+              <button class="btn-move-topic" data-dir="-1" data-topic-id="${escapeHtml(it.id)}" ${ti === 0 ? 'disabled' : ''}>↑</button>
+              <button class="btn-move-topic" data-dir="1" data-topic-id="${escapeHtml(it.id)}" ${ti === items.length - 1 ? 'disabled' : ''}>↓</button>
               <button class="btn-view-topic" data-topic-id="${escapeHtml(it.id)}">Lihat</button>
               <button class="btn-delete-topic" data-topic-id="${escapeHtml(it.id)}">Hapus</button>
             </div>
@@ -392,7 +400,11 @@ function renderManageCategory(catId, cat){
   box.innerHTML = `
     <div class="manage-cat-head">
       <div class="manage-cat-title"><span class="manage-cat-icon">${escapeHtml(cat.icon || '📁')}</span>${escapeHtml(cat.title || '(tanpa judul)')}</div>
-      <button class="btn-delete-cat">Hapus Kategori</button>
+      <div style="display:flex; gap:6px;">
+        <button class="btn-move-cat" data-dir="-1" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button class="btn-move-cat" data-dir="1" ${index === allDocs.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="btn-delete-cat">Hapus Kategori</button>
+      </div>
     </div>
     <ul class="manage-topic-list">${topicsHtml}</ul>
   `;
@@ -406,6 +418,47 @@ function renderManageCategory(catId, cat){
       alert('Gagal menghapus kategori.');
     }
   };
+
+  box.querySelectorAll('.btn-move-cat').forEach(btn => {
+    btn.onclick = async () => {
+      const dir = parseInt(btn.dataset.dir, 10);
+      const neighbor = allDocs[index + dir];
+      if(!neighbor) return;
+      try{
+        const myOrder = cat.order ?? index;
+        const neighborData = neighbor.data();
+        const neighborOrder = neighborData.order ?? (index + dir);
+        await Promise.all([
+          updateDoc(doc(db, 'categories', catId), { order: neighborOrder }),
+          updateDoc(doc(db, 'categories', neighbor.id), { order: myOrder })
+        ]);
+      }catch(err){
+        console.error(err);
+        alert('Gagal mengubah urutan kategori.');
+      }
+    };
+  });
+
+  box.querySelectorAll('.btn-move-topic').forEach(btn => {
+    btn.onclick = async () => {
+      const dir = parseInt(btn.dataset.dir, 10);
+      const topicId = btn.dataset.topicId;
+      try{
+        const catRef = doc(db, 'categories', catId);
+        const freshSnap = await getDoc(catRef);
+        if(!freshSnap.exists()) return;
+        const freshItems = [...(freshSnap.data().items || [])];
+        const i = freshItems.findIndex(it => it.id === topicId);
+        const j = i + dir;
+        if(i === -1 || j < 0 || j >= freshItems.length) return;
+        [freshItems[i], freshItems[j]] = [freshItems[j], freshItems[i]];
+        await updateDoc(catRef, { items: freshItems });
+      }catch(err){
+        console.error(err);
+        alert('Gagal mengubah urutan topik.');
+      }
+    };
+  });
 
   box.querySelectorAll('.btn-view-topic').forEach(btn => {
     btn.onclick = () => {

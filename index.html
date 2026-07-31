@@ -181,8 +181,11 @@
     overflow-y:auto;
   }
   .slide-image-wrap{
-    /* Rasio dikunci 1080:1760 (~1:1.63) supaya ukuran gambar yang harus
-       disiapkan PASTI, tidak ikut berubah-ubah mengikuti panjang teks. */
+    /* Rasio 1080:1760 dipakai HANYA saat belum ada gambar (placeholder),
+       supaya kotaknya tetap terlihat rapi. Begitu ada gambar asli,
+       kotaknya menyesuaikan proporsi gambar itu sendiri (lihat .has-image
+       di bawah) supaya gambar SELALU tampil utuh, tidak terpotong maupun
+       dipaksa ke rasio yang beda dari aslinya. */
     width:100%; aspect-ratio: 1080 / 1760; flex:0 0 auto;
     border-radius:20px; overflow:hidden;
     background:linear-gradient(160deg,#eef5f0,#e2eee6);
@@ -190,11 +193,9 @@
     position:relative; margin-bottom:14px;
     border:1px solid var(--line);
   }
+  .slide-image-wrap.has-image{ aspect-ratio:auto; }
   .slide-image-wrap img{
-    /* contain = gambar SELALU tampil utuh, tidak pernah terpotong.
-       Penting karena gambar bisa berisi penanda/kotak klik yang wajib terlihat. */
-    max-width:100%; max-height:100%; width:auto; height:auto;
-    object-fit:contain; display:block;
+    width:100%; height:auto; display:block;
   }
   .slide-image-placeholder{
     display:flex; flex-direction:column; align-items:center; gap:8px;
@@ -455,7 +456,7 @@ function buildSlides(){
       : `<h2 class="slide-title">${escapeHtml(s.title)}</h2>
          <p class="slide-desc">${formatDescText(s.desc)}</p>`;
     slide.innerHTML = `
-      <div class="slide-image-wrap">
+      <div class="slide-image-wrap${s.image ? ' has-image' : ''}">
         <div class="slide-step-tag">${i+1} / ${currentTutorial.slides.length}</div>
         ${imgHtml}
       </div>
