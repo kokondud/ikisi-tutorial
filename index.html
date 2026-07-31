@@ -198,6 +198,7 @@
   .slide-image-wrap img{
     max-width:100%; max-height:100%; width:auto; height:auto;
     object-fit:contain; display:block;
+    border-radius:20px; /* dipasang langsung di gambar juga, jaga-jaga kalau rounding dari parent gagal ke-render di sebagian browser HP */
   }
   @media (max-width: 480px){
     .slide-image-wrap.has-image{
