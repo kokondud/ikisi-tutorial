@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pusat Tutorial iKISI</title>
 <style>
   :root{
@@ -182,10 +182,12 @@
   }
   .slide-image-wrap{
     /* Rasio 1080:1760 dipakai HANYA saat belum ada gambar (placeholder),
-       supaya kotaknya tetap terlihat rapi. Begitu ada gambar asli,
-       kotaknya menyesuaikan proporsi gambar itu sendiri (lihat .has-image
-       di bawah) supaya gambar SELALU tampil utuh, tidak terpotong maupun
-       dipaksa ke rasio yang beda dari aslinya. */
+       supaya kotaknya tetap terlihat rapi. Begitu ada gambar asli, kotak
+       ini jadi FLEKSIBEL (lihat .has-image) — otomatis mengecil biar
+       teks penjelasan di bawahnya selalu langsung kelihatan tanpa perlu
+       scroll (kecuali teksnya memang panjang). Gambar tidak pernah
+       terpotong (object-fit:contain), orang tinggal pinch-zoom sendiri
+       kalau mau lihat detail gambarnya lebih jelas. */
     width:100%; aspect-ratio: 1080 / 1760; flex:0 0 auto;
     border-radius:20px; overflow:hidden;
     background:linear-gradient(160deg,#eef5f0,#e2eee6);
@@ -193,9 +195,12 @@
     position:relative; margin-bottom:14px;
     border:1px solid var(--line);
   }
-  .slide-image-wrap.has-image{ aspect-ratio:auto; }
+  .slide-image-wrap.has-image{
+    aspect-ratio:auto; flex:1 1 auto; min-height:90px;
+  }
   .slide-image-wrap img{
-    width:100%; height:auto; display:block;
+    max-width:100%; max-height:100%; width:auto; height:auto;
+    object-fit:contain; display:block;
   }
   .slide-image-placeholder{
     display:flex; flex-direction:column; align-items:center; gap:8px;
@@ -208,7 +213,7 @@
     background:rgba(20,67,44,.82); color:#fff; font-size:10.5px; font-weight:700;
     padding:5px 10px; border-radius:999px; letter-spacing:.3px;
   }
-  .slide-text{ padding-bottom:14px; }
+  .slide-text{ flex:0 0 auto; padding-bottom:14px; }
   .slide-title{ font-size:17px; font-weight:800; margin:0 0 6px 0; letter-spacing:-.2px; }
   .slide-desc{ font-size:13px; color:var(--sub); line-height:1.55; margin:0; }
 
