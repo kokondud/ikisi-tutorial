@@ -181,10 +181,10 @@
     overflow-y:auto;
   }
   .slide-image-wrap{
-    /* Rasio 1080:1760 dipakai HANYA saat belum ada gambar (placeholder),
-       supaya kotaknya tetap terlihat rapi. Begitu ada gambar asli, kotak
-       ini jadi FLEKSIBEL (lihat .has-image) — otomatis mengecil biar
-       teks penjelasan di bawahnya selalu langsung kelihatan tanpa perlu
+    /* Kotak/kartu ini defaultnya rasio tetap 1080:1760 (tampilan "normal"
+       di layar besar/desktop). Khusus di layar HP (lihat media query di
+       bawah), kotaknya jadi fleksibel — otomatis mengecil biar teks
+       penjelasan di bawahnya selalu langsung kelihatan tanpa perlu
        scroll (kecuali teksnya memang panjang). Gambar tidak pernah
        terpotong (object-fit:contain), orang tinggal pinch-zoom sendiri
        kalau mau lihat detail gambarnya lebih jelas. */
@@ -195,13 +195,14 @@
     position:relative; margin-bottom:14px;
     border:1px solid var(--line);
   }
-  .slide-image-wrap.has-image{
-    aspect-ratio:auto; flex:1 1 auto; min-height:90px;
-    background:none; border:none;
-  }
   .slide-image-wrap img{
     max-width:100%; max-height:100%; width:auto; height:auto;
     object-fit:contain; display:block;
+  }
+  @media (max-width: 480px){
+    .slide-image-wrap.has-image{
+      aspect-ratio:auto; flex:1 1 auto; min-height:90px;
+    }
   }
   .slide-image-placeholder{
     display:flex; flex-direction:column; align-items:center; gap:8px;
