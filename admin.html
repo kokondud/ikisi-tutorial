@@ -137,7 +137,22 @@
   }
   .manage-topic-list{ list-style:none; margin:10px 0 0 0; padding:0; }
   .manage-topic-row{ background:var(--bg); border-radius:8px; margin-bottom:6px; padding:8px 10px; }
-  .manage-topic-row-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; }
+  .manage-topic-row-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; flex-wrap:wrap; }
+  .topic-title-view{ display:flex; align-items:center; gap:8px; flex:1 1 auto; min-width:140px; }
+  .btn-edit-topic-title{
+    border:1px solid var(--line); background:var(--paper); color:var(--kisi-green); font-size:10.5px;
+    font-weight:700; padding:3px 8px; border-radius:7px; cursor:pointer; flex:0 0 auto;
+  }
+  .topic-title-edit{ display:flex; align-items:center; gap:6px; flex:1 1 100%; }
+  .topic-title-edit-input{
+    flex:1; padding:6px 8px; border:1px solid var(--line); border-radius:8px;
+    font-size:12.5px; font-family:inherit;
+  }
+  .btn-save-topic-title, .btn-cancel-topic-title{
+    flex:0 0 auto; font-size:11px; font-weight:700; padding:6px 10px; border-radius:8px; cursor:pointer;
+  }
+  .btn-save-topic-title{ border:none; background:var(--kisi-green); color:#fff; }
+  .btn-cancel-topic-title{ border:1px solid var(--line); background:var(--paper); color:var(--sub); }
   .manage-topic-detail{ margin-top:8px; padding:0; }
   .btn-view-topic{
     border:1px solid var(--line); background:var(--paper); color:var(--kisi-green); font-size:11px;
@@ -537,7 +552,15 @@ function renderManageCategory(catId, cat, index, allDocs){
     ? items.map((it, ti) => `
         <li class="manage-topic-row">
           <div class="manage-topic-row-head">
-            <span>${escapeHtml(it.title || '(tanpa judul)')} <span style="color:var(--sub);">(${(it.slides || []).length} langkah)</span></span>
+            <div class="topic-title-view">
+              <span>${escapeHtml(it.title || '(tanpa judul)')} <span style="color:var(--sub);">(${(it.slides || []).length} langkah)</span></span>
+              <button class="btn-edit-topic-title" data-topic-id="${escapeHtml(it.id)}">Edit Judul</button>
+            </div>
+            <div class="topic-title-edit" style="display:none;">
+              <input type="text" class="topic-title-edit-input" value="${escapeHtml(it.title || '')}">
+              <button class="btn-save-topic-title" data-topic-id="${escapeHtml(it.id)}">Simpan</button>
+              <button class="btn-cancel-topic-title">Batal</button>
+            </div>
             <div style="display:flex; gap:6px;">
               <button class="btn-move-topic" data-dir="-1" data-topic-id="${escapeHtml(it.id)}" ${ti === 0 ? 'disabled' : ''}>↑</button>
               <button class="btn-move-topic" data-dir="1" data-topic-id="${escapeHtml(it.id)}" ${ti === items.length - 1 ? 'disabled' : ''}>↓</button>
@@ -617,6 +640,52 @@ function renderManageCategory(catId, cat, index, allDocs){
       }catch(err){
         console.error(err);
         alert('Gagal mengubah urutan topik.');
+      }
+    };
+  });
+
+  box.querySelectorAll('.btn-edit-topic-title').forEach(btn => {
+    btn.onclick = () => {
+      const row = btn.closest('.manage-topic-row-head');
+      row.querySelector('.topic-title-view').style.display = 'none';
+      row.querySelector('.topic-title-edit').style.display = 'flex';
+      row.querySelector('.topic-title-edit-input').focus();
+    };
+  });
+
+  box.querySelectorAll('.btn-cancel-topic-title').forEach(btn => {
+    btn.onclick = () => {
+      const row = btn.closest('.manage-topic-row-head');
+      row.querySelector('.topic-title-edit').style.display = 'none';
+      row.querySelector('.topic-title-view').style.display = 'flex';
+    };
+  });
+
+  box.querySelectorAll('.btn-save-topic-title').forEach(btn => {
+    btn.onclick = async () => {
+      const row = btn.closest('.manage-topic-row-head');
+      const topicId = btn.dataset.topicId;
+      const newTitle = row.querySelector('.topic-title-edit-input').value.trim();
+      if(!newTitle){
+        alert('Judul topik tidak boleh kosong.');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Menyimpan...';
+      try{
+        const catRef = doc(db, 'categories', catId);
+        const freshSnap = await getDoc(catRef);
+        if(!freshSnap.exists()) return;
+        const freshItems = [...(freshSnap.data().items || [])];
+        const topicIdx = freshItems.findIndex(t => t.id === topicId);
+        if(topicIdx === -1) return;
+        freshItems[topicIdx] = { ...freshItems[topicIdx], title: newTitle };
+        await updateDoc(catRef, { items: freshItems });
+      }catch(err){
+        console.error(err);
+        alert('Gagal menyimpan judul topik.');
+        btn.disabled = false;
+        btn.textContent = 'Simpan';
       }
     };
   });
