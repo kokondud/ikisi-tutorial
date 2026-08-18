@@ -103,6 +103,27 @@
     font-weight:800; padding:10px 14px; border-radius:10px; cursor:pointer; white-space:nowrap;
   }
   .btn-export:disabled{ opacity:.6; cursor:not-allowed; }
+
+  .new-cat-box{
+    background:var(--paper); border:1px dashed var(--kisi-green); border-radius:14px;
+    padding:14px 16px; margin-top:14px;
+  }
+  .new-cat-box h3{ font-size:13.5px; margin:0 0 10px 0; color:var(--kisi-green); }
+  .new-cat-row{ display:flex; gap:8px; margin-bottom:8px; }
+  .new-cat-icon-input{
+    width:52px; flex:0 0 auto; text-align:center; padding:8px; border:1px solid var(--line);
+    border-radius:8px; font-size:16px;
+  }
+  .new-cat-title-input, .new-cat-desc-input{
+    flex:1; width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px;
+    font-size:12.5px; font-family:inherit; margin-bottom:8px;
+  }
+  .new-cat-title-input{ margin-bottom:0; }
+  .btn-add-cat{
+    border:none; background:var(--kisi-green); color:#fff; font-size:12.5px;
+    font-weight:800; padding:9px 16px; border-radius:8px; cursor:pointer;
+  }
+  .btn-add-cat:disabled{ opacity:.6; cursor:not-allowed; }
   .manage-cat{
     background:var(--paper); border:1px solid var(--line); border-radius:14px;
     padding:14px 16px; margin-top:12px;
@@ -205,6 +226,18 @@
       <button id="btn-export-html" class="btn-export">⬇ Export HTML Lengkap (untuk Eksternal)</button>
     </div>
     <div id="export-status" class="import-status"></div>
+
+    <div class="new-cat-box">
+      <h3>+ Tambah Kategori Baru</h3>
+      <div class="new-cat-row">
+        <input type="text" id="new-cat-icon" placeholder="📁" maxlength="4" class="new-cat-icon-input">
+        <input type="text" id="new-cat-title" placeholder="Nama kategori, contoh: Obligasi" class="new-cat-title-input">
+      </div>
+      <input type="text" id="new-cat-desc" placeholder="Deskripsi singkat (opsional)" class="new-cat-desc-input">
+      <button id="btn-add-cat" class="btn-add-cat">Tambah Kategori</button>
+      <div id="new-cat-status" class="import-status"></div>
+    </div>
+
     <div id="manage-list"></div>
   </div>
 
@@ -439,9 +472,12 @@ async function uploadToImgbb(file){
   return data.data.url;
 }
 
+let latestCategoryDocs = [];
+
 function listenCategories(){
   const q = query(collection(db, 'categories'), orderBy('order'));
   unsubscribeCategories = onSnapshot(q, (snap) => {
+    latestCategoryDocs = snap.docs;
     manageListEl.innerHTML = '';
     if(snap.empty){
       manageListEl.innerHTML = '<p class="empty-note">Belum ada kategori tersedia.</p>';
@@ -742,6 +778,54 @@ function renderManageCategory(catId, cat, index, allDocs){
 
 const importBtn = document.getElementById('btn-import');
 const importStatus = document.getElementById('import-status');
+
+const btnAddCat = document.getElementById('btn-add-cat');
+const newCatStatus = document.getElementById('new-cat-status');
+
+btnAddCat.onclick = async () => {
+  const iconInput = document.getElementById('new-cat-icon');
+  const titleInput = document.getElementById('new-cat-title');
+  const descInput = document.getElementById('new-cat-desc');
+
+  const icon = iconInput.value.trim() || '📁';
+  const title = titleInput.value.trim();
+  const desc = descInput.value.trim();
+
+  newCatStatus.className = 'import-status';
+  newCatStatus.textContent = '';
+
+  if(!title){
+    newCatStatus.className = 'import-status error';
+    newCatStatus.textContent = 'Nama kategori belum diisi.';
+    return;
+  }
+
+  btnAddCat.disabled = true;
+  btnAddCat.textContent = 'Menyimpan...';
+  try{
+    const newId = uid('cat');
+    await setDoc(doc(db, 'categories', newId), {
+      order: latestCategoryDocs.length,
+      title,
+      icon,
+      tint: '#eafaf1',
+      desc,
+      items: []
+    });
+    iconInput.value = '';
+    titleInput.value = '';
+    descInput.value = '';
+    newCatStatus.className = 'import-status success';
+    newCatStatus.textContent = `Kategori "${title}" berhasil ditambahkan.`;
+  }catch(err){
+    console.error(err);
+    newCatStatus.className = 'import-status error';
+    newCatStatus.textContent = 'Gagal menambahkan kategori.';
+  }finally{
+    btnAddCat.disabled = false;
+    btnAddCat.textContent = 'Tambah Kategori';
+  }
+};
 
 const exportBtn = document.getElementById('btn-export-html');
 const exportStatus = document.getElementById('export-status');
