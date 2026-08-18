@@ -127,6 +127,11 @@
     font-weight:700; width:26px; height:26px; border-radius:8px; cursor:pointer; flex:0 0 auto;
   }
   .btn-move-cat:disabled, .btn-move-topic:disabled{ opacity:.3; cursor:not-allowed; }
+  .manage-topic-row-actions2{ margin-top:6px; }
+  .topic-move-select{
+    width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:8px;
+    font-size:11.5px; background:var(--paper); color:var(--sub); font-family:inherit;
+  }
   .btn-delete-topic{
     border:none; background:var(--danger-soft); color:var(--danger); font-size:11px;
     font-weight:700; padding:4px 9px; border-radius:8px; cursor:pointer; flex:0 0 auto;
@@ -222,7 +227,7 @@ import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import {
-  getFirestore, collection, query, orderBy, onSnapshot, getDocs,
+  getFirestore, collection, query, orderBy, onSnapshot, getDocs, writeBatch,
   doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
@@ -487,6 +492,11 @@ function renderManageCategory(catId, cat, index, allDocs){
   box.className = 'manage-cat';
 
   const items = cat.items || [];
+  const catOptionsHtml = allDocs
+    .filter(d => d.id !== catId)
+    .map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.data().title || '(tanpa judul)')}</option>`)
+    .join('');
+
   const topicsHtml = items.length
     ? items.map((it, ti) => `
         <li class="manage-topic-row">
@@ -498,6 +508,12 @@ function renderManageCategory(catId, cat, index, allDocs){
               <button class="btn-view-topic" data-topic-id="${escapeHtml(it.id)}">Lihat</button>
               <button class="btn-delete-topic" data-topic-id="${escapeHtml(it.id)}">Hapus</button>
             </div>
+          </div>
+          <div class="manage-topic-row-actions2">
+            <select class="topic-move-select" data-topic-id="${escapeHtml(it.id)}">
+              <option value="" selected disabled>Pindah ke kategori lain...</option>
+              ${catOptionsHtml}
+            </select>
           </div>
           <ul class="pending-steps manage-topic-detail" data-topic-id="${escapeHtml(it.id)}" style="display:none;">
             ${(it.slides || []).map((s, i) => renderSlideDetailHtml(s, i, it.id)).join('')}
@@ -565,6 +581,42 @@ function renderManageCategory(catId, cat, index, allDocs){
       }catch(err){
         console.error(err);
         alert('Gagal mengubah urutan topik.');
+      }
+    };
+  });
+
+  box.querySelectorAll('.topic-move-select').forEach(select => {
+    select.onchange = async () => {
+      const topicId = select.dataset.topicId;
+      const targetCatId = select.value;
+      const targetTitle = select.options[select.selectedIndex].textContent;
+      if(!targetCatId) return;
+      if(!confirm(`Pindahkan topik ini ke kategori "${targetTitle}"?`)){
+        select.value = '';
+        return;
+      }
+      select.disabled = true;
+      try{
+        const sourceRef = doc(db, 'categories', catId);
+        const targetRef = doc(db, 'categories', targetCatId);
+        const [sourceSnap, targetSnap] = await Promise.all([getDoc(sourceRef), getDoc(targetRef)]);
+        if(!sourceSnap.exists() || !targetSnap.exists()) return;
+
+        const sourceItems = sourceSnap.data().items || [];
+        const movingTopic = sourceItems.find(it => it.id === topicId);
+        if(!movingTopic) return;
+        const newSourceItems = sourceItems.filter(it => it.id !== topicId);
+        const newTargetItems = [...(targetSnap.data().items || []), movingTopic];
+
+        const batch = writeBatch(db);
+        batch.update(sourceRef, { items: newSourceItems });
+        batch.update(targetRef, { items: newTargetItems });
+        await batch.commit();
+      }catch(err){
+        console.error(err);
+        alert('Gagal memindahkan topik.');
+        select.disabled = false;
+        select.value = '';
       }
     };
   });
