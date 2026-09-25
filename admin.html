@@ -1050,13 +1050,33 @@ migrateBtn.onclick = async () => {
   const failed = [];
   const mapping = {};
   try{
-    // ambil & kecilkan gambar satu per satu, commit per 20 gambar
+    // Ambil & kecilkan gambar satu per satu. Setiap 10 gambar: simpan ke GitHub,
+    // lalu langsung ganti link-nya di tutorial. Jadi kalau proses terhenti di
+    // tengah, gambar yang sudah dipindah tidak perlu diulang.
     let batch = [], batchUrls = [];
+    const applyLinks = async (map) => {
+      const snap = await getDocs(query(collection(db, 'categories'), orderBy('order')));
+      for(const d of snap.docs){
+        let changed = false;
+        const newItems = (d.data().items || []).map(t => ({
+          ...t,
+          slides: (t.slides || []).map(s => {
+            if(s.image && map[s.image]){ changed = true; return { ...s, image: map[s.image] }; }
+            return s;
+          })
+        }));
+        if(changed) await updateDoc(doc(db, 'categories', d.id), { items: newItems });
+      }
+    };
     const flush = async () => {
       if(!batch.length) return;
+      migrateStatus.textContent = `Menyimpan ${batch.length} gambar ke GitHub...`;
       const newUrls = await commitImages(batch, `Pindah ${batch.length} gambar tutorial dari ImgBB`);
-      batchUrls.forEach((old, k) => { mapping[old] = newUrls[k]; });
+      const map = {};
+      batchUrls.forEach((old, k) => { map[old] = newUrls[k]; mapping[old] = newUrls[k]; });
       batch = []; batchUrls = [];
+      migrateStatus.textContent = 'Memperbarui link di tutorial...';
+      await applyLinks(map);
     };
     for(let i = 0; i < urls.length; i++){
       migrateStatus.textContent = `Mengambil gambar ${i + 1} dari ${urls.length}...`;
@@ -1069,26 +1089,10 @@ migrateBtn.onclick = async () => {
         console.warn('Gagal mengambil', urls[i], err);
         failed.push(urls[i]);
       }
-      if(batch.length >= 20){ migrateStatus.textContent = 'Menyimpan ke GitHub...'; await flush(); }
+      if(batch.length >= 10) await flush();
     }
-    migrateStatus.textContent = 'Menyimpan ke GitHub...';
     await flush();
 
-    // ganti link di semua kategori
-    migrateStatus.textContent = 'Memperbarui link di tutorial...';
-    const snap = await getDocs(query(collection(db, 'categories'), orderBy('order')));
-    for(const d of snap.docs){
-      const items = d.data().items || [];
-      let changed = false;
-      const newItems = items.map(t => ({
-        ...t,
-        slides: (t.slides || []).map(s => {
-          if(s.image && mapping[s.image]){ changed = true; return { ...s, image: mapping[s.image] }; }
-          return s;
-        })
-      }));
-      if(changed) await updateDoc(doc(db, 'categories', d.id), { items: newItems });
-    }
     const moved = Object.keys(mapping).length;
     migrateStatus.className = failed.length ? 'import-status error' : 'import-status success';
     migrateStatus.innerHTML = `${moved} gambar berhasil dipindah. Gambar baru tampil di situs ±1–2 menit lagi.` +
@@ -1098,7 +1102,10 @@ migrateBtn.onclick = async () => {
   }catch(err){
     console.error(err);
     migrateStatus.className = 'import-status error';
-    migrateStatus.textContent = 'Proses terhenti: ' + err.message + ' Tutorial tidak berubah dan tetap tayang normal. Periksa token, lalu klik Pindahkan lagi.';
+    const moved = Object.keys(mapping).length;
+    migrateStatus.textContent = 'Proses terhenti: ' + err.message +
+      (moved ? ` ${moved} gambar sudah berhasil dipindah dan link-nya sudah diperbarui.` : '') +
+      ' Tutorial tetap tayang normal. Klik Pindahkan lagi untuk melanjutkan sisanya.';
   }finally{
     refreshMigrateUi();
   }
