@@ -76,16 +76,6 @@
   .btn-reject{ background:var(--danger-soft); color:var(--danger); }
   .btn-approve:disabled, .btn-reject:disabled{ opacity:.5; cursor:not-allowed; }
 
-  .import-box{
-    background:var(--paper); border:1px solid var(--line); border-radius:14px;
-    padding:16px; margin-top:34px;
-  }
-  .import-box h2{ font-size:15px; margin:0 0 4px 0; }
-  .import-box textarea{
-    width:100%; min-height:110px; margin-top:10px; padding:10px 12px;
-    border:1px solid var(--line); border-radius:10px; font-size:12px;
-    font-family:ui-monospace,Consolas,monospace; resize:vertical;
-  }
   .btn-import{
     margin-top:10px; padding:11px 16px; border:none; border-radius:10px;
     background:var(--kisi-dark); color:#fff; font-weight:800; font-size:13px; cursor:pointer;
@@ -310,13 +300,6 @@
     <div id="manage-list"></div>
   </div>
 
-  <div class="import-box">
-    <h2>Impor dari Generator Lama</h2>
-    <p class="sub">Cuma perlu dilakukan sekali di awal, buat mindahin tutorial yang sudah ada di file generator lama ke sini. Buka file generator, klik "📋 Salin Data (JSON) untuk Firebase", lalu tempel hasilnya di bawah ini.</p>
-    <textarea id="import-json" placeholder="Tempel hasil salinan JSON di sini..."></textarea>
-    <button id="btn-import" class="btn-import">Impor ke Firestore</button>
-    <div id="import-status" class="import-status"></div>
-  </div>
 </div>
 
 <div id="img-modal" class="img-modal">
@@ -1111,8 +1094,6 @@ migrateBtn.onclick = async () => {
   }
 };
 
-const importBtn = document.getElementById('btn-import');
-const importStatus = document.getElementById('import-status');
 
 const btnAddCat = document.getElementById('btn-add-cat');
 const newCatStatus = document.getElementById('new-cat-status');
@@ -1205,49 +1186,6 @@ exportBtn.onclick = async () => {
   }
 };
 
-importBtn.onclick = async () => {
-  const raw = document.getElementById('import-json').value.trim();
-  importStatus.className = 'import-status';
-  importStatus.textContent = '';
-
-  let parsed;
-  try{
-    parsed = JSON.parse(raw);
-    if(!Array.isArray(parsed)) throw new Error('bukan array');
-  }catch(e){
-    importStatus.className = 'import-status error';
-    importStatus.textContent = 'JSON tidak valid. Pastikan kamu menyalin seluruh teks dari tombol "Salin Data (JSON)".';
-    return;
-  }
-
-  if(!confirm(`Impor ${parsed.length} kategori ke Firestore? Ini akan MENIMPA kategori yang judulnya sama persis.`)) return;
-
-  importBtn.disabled = true;
-  importBtn.textContent = 'Mengimpor...';
-  try{
-    for(let i = 0; i < parsed.length; i++){
-      const cat = parsed[i];
-      await setDoc(doc(db, 'categories', cat.id || uid('cat')), {
-        order: i,
-        title: cat.title || '',
-        icon: cat.icon || '📁',
-        tint: cat.tint || '#eafaf1',
-        desc: cat.desc || '',
-        items: cat.items || []
-      });
-    }
-    importStatus.className = 'import-status success';
-    importStatus.textContent = `Berhasil mengimpor ${parsed.length} kategori. Cek halaman utama untuk memastikan.`;
-    document.getElementById('import-json').value = '';
-  }catch(err){
-    console.error(err);
-    importStatus.className = 'import-status error';
-    importStatus.textContent = 'Gagal mengimpor sebagian/seluruh data. Coba lagi.';
-  }finally{
-    importBtn.disabled = false;
-    importBtn.textContent = 'Impor ke Firestore';
-  }
-};
 </script>
 </body>
 </html>
