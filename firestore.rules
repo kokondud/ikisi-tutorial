@@ -1,0 +1,75 @@
+rules_version = '2';
+
+// =============================================================================
+//  ATURAN KEAMANAN FIRESTORE — Pusat Tutorial iKISI
+// =============================================================================
+//  Cara pasang: Firebase Console -> Firestore Database -> Rules -> hapus isi
+//  lama, tempel seluruh file ini, lalu klik Publish.
+//
+//  WAJIB DIISI: UID akun admin di fungsi isAdmin() di bawah.
+//  Cara lihat UID: Firebase Console -> Authentication -> Users -> kolom
+//  "User UID" (teks panjang seperti "aB3xY9..."). Kalau admin lebih dari satu,
+//  pisahkan dengan koma: ['UID_PERTAMA', 'UID_KEDUA'].
+//
+//  Kenapa pakai UID, bukan "asal sudah login"? Karena apiKey Firebase memang
+//  terlihat publik di kode, siapa pun bisa membuat akun sendiri lewat API kalau
+//  pendaftaran tidak dimatikan. Dengan daftar UID, hanya akun yang disebut di
+//  sini yang bisa mengubah tutorial.
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.uid in ['GANTI_DENGAN_UID_ADMIN'];
+    }
+
+    function isShortString(v, minLen, maxLen) {
+      return v is string && v.size() >= minLen && v.size() <= maxLen;
+    }
+
+    // Tutorial yang tayang: semua orang boleh baca, hanya admin yang boleh ubah.
+    match /categories/{catId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Usulan dari form publik: siapa pun boleh MENGIRIM (dengan format yang
+    // benar), tapi hanya admin yang boleh melihat, mengubah, atau menghapus.
+    match /pending_topics/{id} {
+      allow read, update, delete: if isAdmin();
+      allow create: if
+        request.resource.data.keys().hasOnly(
+          ['categoryId', 'categoryTitle', 'topicTitle', 'steps', 'submitterName', 'status', 'createdAt'])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && isShortString(request.resource.data.categoryId, 1, 100)
+        && exists(/databases/$(database)/documents/categories/$(request.resource.data.categoryId))
+        && isShortString(request.resource.data.categoryTitle, 1, 120)
+        && isShortString(request.resource.data.topicTitle, 3, 100)
+        && request.resource.data.steps is list
+        && request.resource.data.steps.size() >= 1
+        && request.resource.data.steps.size() <= 15
+        && (request.resource.data.submitterName == null
+            || isShortString(request.resource.data.submitterName, 1, 60));
+    }
+
+    // Screenshot usulan yang menunggu review. Disimpan tertutup (hanya admin
+    // yang bisa melihat), baru dipindah ke GitHub kalau usulan disetujui.
+    match /pending_images/{id} {
+      allow read, delete: if isAdmin();
+      allow create: if
+        request.resource.data.keys().hasOnly(['data', 'mime', 'createdAt'])
+        && request.resource.data.mime in ['image/webp', 'image/jpeg']
+        && request.resource.data.data is string
+        && request.resource.data.data.size() <= 900000
+        && request.resource.data.createdAt == request.time;
+    }
+
+    // Semua koleksi lain tertutup.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

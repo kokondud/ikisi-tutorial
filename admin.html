@@ -96,6 +96,20 @@
   .import-status.error{ color:var(--danger); }
 
   .manage-section{ margin-top:34px; }
+  .storage-box{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-top:6px; }
+  .storage-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .storage-box h2{ font-size:15px; margin:0; }
+  .storage-box code{ background:var(--bg); padding:1px 5px; border-radius:5px; font-size:11.5px; }
+  .storage-badge{ font-size:11px; font-weight:800; padding:4px 9px; border-radius:999px; background:var(--danger-soft); color:var(--danger); white-space:nowrap; }
+  .storage-badge.ok{ background:var(--kisi-emerald-soft); color:var(--kisi-green); }
+  .storage-box input{ width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font-size:13px; font-family:inherit; }
+  .storage-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .token-help{ margin-top:10px; font-size:12.5px; color:var(--sub); line-height:1.6; }
+  .token-help summary{ cursor:pointer; color:var(--kisi-green); font-weight:700; }
+  .token-help ol{ padding-left:20px; margin:8px 0 0 0; }
+  .migrate-box{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:14px; background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:12px 16px; font-size:13.5px; }
+  .migrate-box .btn-import{ margin-top:0; flex:0 0 auto; }
+  .pending-img-missing{ font-size:11px; color:var(--danger); width:44px; flex:0 0 auto; }
   .manage-section-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
   .manage-section h2{ font-size:15px; margin:0 0 4px 0; }
   .btn-export{
@@ -230,6 +244,37 @@
     </div>
     <button class="btn-logout" id="btn-logout">Keluar</button>
   </div>
+  <div class="storage-box" id="storage-box">
+    <div class="storage-head">
+      <h2>Penyimpanan Gambar (GitHub)</h2>
+      <span class="storage-badge" id="storage-badge">Belum diatur</span>
+    </div>
+    <p class="sub" style="margin:4px 0 10px 0;">Gambar tutorial disimpan di folder <code>images/</code> repo <code id="repo-name"></code>. Token hanya tersimpan di browser komputer ini, tidak ikut ke kode.</p>
+    <div id="token-form">
+      <input type="password" id="gh-token" placeholder="Tempel token GitHub (github_pat_...)" autocomplete="off">
+      <div class="storage-actions">
+        <button class="btn-add-cat" id="btn-save-token">Simpan &amp; Tes</button>
+      </div>
+      <details class="token-help">
+        <summary>Cara membuat token</summary>
+        <ol>
+          <li>Login GitHub (akun pemilik repo), buka <b>Settings → Developer settings → Personal access tokens → Fine-grained tokens</b> → <b>Generate new token</b>.</li>
+          <li>Token name: <i>ikisi-tutorial-admin</i>. Expiration: 90 hari (atau sesuai kebijakan).</li>
+          <li>Repository access: <b>Only select repositories</b> → pilih <b>ikisi-tutorial</b> saja.</li>
+          <li>Permissions → Repository permissions → <b>Contents: Read and write</b>. Yang lain biarkan.</li>
+          <li>Generate, salin token, tempel di kotak di atas, klik Simpan &amp; Tes.</li>
+        </ol>
+      </details>
+    </div>
+    <div id="token-set" style="display:none;">
+      <div class="storage-actions">
+        <button class="btn-logout" id="btn-test-token">Tes koneksi</button>
+        <button class="btn-logout" id="btn-clear-token">Hapus token dari browser ini</button>
+      </div>
+    </div>
+    <div id="token-status" class="import-status"></div>
+  </div>
+
   <div id="pending-list"></div>
 
   <div class="manage-section">
@@ -241,6 +286,15 @@
       <button id="btn-export-html" class="btn-export">⬇ Export HTML Lengkap (untuk Eksternal)</button>
     </div>
     <div id="export-status" class="import-status"></div>
+
+    <div class="migrate-box">
+      <div>
+        <b>Pindahkan gambar lama ke GitHub</b>
+        <p class="sub" style="margin:2px 0 0 0;" id="migrate-desc">Memeriksa gambar...</p>
+      </div>
+      <button class="btn-import" id="btn-migrate" disabled>Pindahkan</button>
+    </div>
+    <div id="migrate-status" class="import-status"></div>
 
     <div class="new-cat-box">
       <h3>+ Tambah Kategori Baru</h3>
@@ -279,33 +333,32 @@ import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
-import { IMGBB_API_KEY } from "./imgbb-config.js";
+import { compressImage, blobToBase64, extForMime } from "./image-utils.js";
+import { commitImages, hasToken, setToken, clearToken, testConnection, isGithubImage } from "./github-store.js";
+import { GITHUB } from "./github-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
 /* ========================= Export HTML mandiri (untuk eksternal) =========================
-   Template ini SAMA PERSIS dengan yang dipakai generator lama (iKISI_Tutorial_Generator.html)
-   — file hasil export TIDAK mengandung Firebase ataupun tombol "Usul Tutorial", murni HTML/CSS/
-   JS statis yang bisa dibuka siapa saja tanpa koneksi ke database. */
-const EXPORT_HEADER_B64 = "PCFET0NUWVBFIGh0bWw+CjxodG1sIGxhbmc9ImlkIj4KPGhlYWQ+CjxtZXRhIGNoYXJzZXQ9IlVURi04Ij4KPG1ldGEgbmFtZT0idmlld3BvcnQiIGNvbnRlbnQ9IndpZHRoPWRldmljZS13aWR0aCwgaW5pdGlhbC1zY2FsZT0xIj4KPHRpdGxlPlR1dG9yaWFsIGlLSVNJPC90aXRsZT4KPHN0eWxlPgogIDpyb290ewogICAgLS1raXNpLWRhcms6ICMxNDQzMmM7CiAgICAtLWtpc2ktZ3JlZW46ICMxYTVjM2E7CiAgICAtLWtpc2ktZW1lcmFsZDogIzJlY2M3MTsKICAgIC0ta2lzaS1lbWVyYWxkLXNvZnQ6ICNlYWZhZjE7CiAgICAtLWluazogIzE0MjAxYTsKICAgIC0tc3ViOiAjNmI3ZDc0OwogICAgLS1saW5lOiAjZTRlY2U3OwogICAgLS1wYXBlcjogI2ZmZmZmZjsKICAgIC0tYmc6ICNmNGY4ZjU7CiAgfQogICp7Ym94LXNpemluZzpib3JkZXItYm94OyAtd2Via2l0LXRhcC1oaWdobGlnaHQtY29sb3I6dHJhbnNwYXJlbnQ7fQogIGh0bWwsYm9keXttYXJnaW46MDt9CiAgaHRtbHtoZWlnaHQ6MTAwJTt9CiAgYm9keXsKICAgIGZvbnQtZmFtaWx5OidTZWdvZSBVSScsLWFwcGxlLXN5c3RlbSxSb2JvdG8sSGVsdmV0aWNhLEFyaWFsLHNhbnMtc2VyaWY7CiAgICBiYWNrZ3JvdW5kOnZhcigtLWJnKTsKICAgIGNvbG9yOnZhcigtLWluayk7CiAgICBkaXNwbGF5OmZsZXg7CiAgICBhbGlnbi1pdGVtczpjZW50ZXI7CiAgICBqdXN0aWZ5LWNvbnRlbnQ6Y2VudGVyOwogICAgbWluLWhlaWdodDoxMDB2aDsKICAgIG1pbi1oZWlnaHQ6MTAwc3ZoOyAvKiBzdmggPSB0aW5nZ2kgdmlld3BvcnQgVEFOUEEgYWRkcmVzcyBiYXIsIGphZGkgbW9ja3VwIHRpZGFrIHBlcm5haCBsZWJpaCB0aW5nZ2kgZGFyaSBsYXlhciB5YW5nIGJlbmFyLWJlbmFyIHRlcmxpaGF0ICovCiAgICBwYWRkaW5nOjE2cHg7CiAgICBvdmVyZmxvdy15OmF1dG87IC8qIGphZ2EtamFnYToga2FsYXUgdGV0YXAgbGViaWggdGluZ2dpIGRhcmkgbGF5YXIsIGJpc2EgZGlzY3JvbGwsIGJ1a2FuIHRlcnBvdG9uZyAqLwogIH0KCiAgLyogPT09PT09PT09PT09IFBIT05FIEZSQU1FID09PT09PT09PT09PSAqLwogICNwaG9uZXsKICAgIHdpZHRoOjEwMCU7CiAgICBtYXgtd2lkdGg6MzYwcHg7CiAgICBoZWlnaHQ6NzgwcHg7CiAgICBtYXgtaGVpZ2h0Ojg4dmg7CiAgICBtYXgtaGVpZ2h0Ojg4c3ZoOyAvKiBkaWhpdHVuZyBkYXJpIHRpbmdnaSBsYXlhciB5YW5nIGJlbmFyLWJlbmFyIHRlcmxpaGF0ICh0YW5wYSBhZGRyZXNzIGJhciBIUCkgKi8KICAgIGJhY2tncm91bmQ6dmFyKC0tcGFwZXIpOwogICAgYm9yZGVyLXJhZGl1czozNHB4OwogICAgYm94LXNoYWRvdzowIDIwcHggNjBweCByZ2JhKDIwLDY3LDQ0LC4xOCksIDAgMnB4IDhweCByZ2JhKDIwLDY3LDQ0LC4wOCk7CiAgICBvdmVyZmxvdzpoaWRkZW47CiAgICBwb3NpdGlvbjpyZWxhdGl2ZTsKICAgIGJvcmRlcjo4cHggc29saWQgIzBmMmUxZTsKICB9CiAgI2FwcHtwb3NpdGlvbjphYnNvbHV0ZTsgaW5zZXQ6MDsgb3ZlcmZsb3c6aGlkZGVuO30KCiAgLyogRGkgSFAgYmVuZXJhbiwgaGFsYW1hbiBpbmkgYmlhc2FueWEgZGlidWthIGxhbmdzdW5nIChidWthbiBjdW1hIGRpbGloYXQKICAgICBzZWJhZ2FpIG1vY2t1cCBkaSBkZXNrdG9wKSDigJQgamFkaSBiaW5na2FpIEhQLW55YSBkaWxlcGFzIGRhbiBkaWlzaQogICAgIHBlbnVoIGtlIGxheWFyIGFzbGksIHRpZGFrIG55aXNhaW4gamFyYWsvZ2FwIGRpIGJhd2FoLiAqLwogIEBtZWRpYSAobWF4LXdpZHRoOiA0ODBweCl7CiAgICBib2R5eyBwYWRkaW5nOjA7IGFsaWduLWl0ZW1zOnN0cmV0Y2g7IH0KICAgICNwaG9uZXsKICAgICAgd2lkdGg6MTAwJTsgbWF4LXdpZHRoOjEwMCU7CiAgICAgIGhlaWdodDoxMDB2aDsgaGVpZ2h0OjEwMGR2aDsKICAgICAgbWF4LWhlaWdodDpub25lOwogICAgICBib3JkZXItcmFkaXVzOjA7IGJvcmRlcjpub25lOyBib3gtc2hhZG93Om5vbmU7CiAgICB9CiAgfQogIC5zY3JlZW57CiAgICBwb3NpdGlvbjphYnNvbHV0ZTsgaW5zZXQ6MDsKICAgIGRpc3BsYXk6ZmxleDsgZmxleC1kaXJlY3Rpb246Y29sdW1uOwogICAgYmFja2dyb3VuZDp2YXIoLS1wYXBlcik7CiAgICB0cmFuc2l0aW9uOiB0cmFuc2Zvcm0gLjMycyBjdWJpYy1iZXppZXIoLjIyLC42MSwuMzYsMSksIG9wYWNpdHkgLjI1cyBlYXNlOwogIH0KCiAgLyogPT09PT09PT09PT09IE1FTlUgU0NSRUVOID09PT09PT09PT09PSAqLwogICNtZW51LXNjcmVlbnsgb3ZlcmZsb3cteTphdXRvOyB9CiAgLm1lbnUtaGVhZGVyewogICAgYmFja2dyb3VuZDpsaW5lYXItZ3JhZGllbnQoMTU1ZGVnLCB2YXIoLS1raXNpLWRhcmspLCB2YXIoLS1raXNpLWdyZWVuKSA3MCUpOwogICAgcGFkZGluZzoyOHB4IDIycHggMjZweCAyMnB4OwogICAgY29sb3I6I2ZmZjsKICAgIHBvc2l0aW9uOnJlbGF0aXZlOwogIH0KICAubWVudS1oZWFkZXI6OmFmdGVyewogICAgY29udGVudDoiIjsKICAgIHBvc2l0aW9uOmFic29sdXRlOyBsZWZ0OjA7IHJpZ2h0OjA7IGJvdHRvbTotMXB4OyBoZWlnaHQ6MThweDsKICAgIGJhY2tncm91bmQ6dmFyKC0tcGFwZXIpOwogICAgYm9yZGVyLXJhZGl1czoxOHB4IDE4cHggMCAwOwogIH0KICAubWVudS1leWVicm93ewogICAgZm9udC1zaXplOjExcHg7IGZvbnQtd2VpZ2h0OjcwMDsgbGV0dGVyLXNwYWNpbmc6MS41cHg7CiAgICBjb2xvcjojYTllNmM0OyB0ZXh0LXRyYW5zZm9ybTp1cHBlcmNhc2U7IG1hcmdpbi1ib3R0b206NnB4OwogIH0KICAubWVudS10aXRsZXsgZm9udC1zaXplOjI0cHg7IGZvbnQtd2VpZ2h0OjgwMDsgbGV0dGVyLXNwYWNpbmc6LS4ycHg7IG1hcmdpbjowIDAgNnB4IDA7fQogIC5tZW51LWRlc2N7IGZvbnQtc2l6ZToxMi41cHg7IGNvbG9yOiNjZmU4ZGE7IGxpbmUtaGVpZ2h0OjEuNTsgbWFyZ2luOjA7IG1heC13aWR0aDoyOTBweDt9CiAgLm1lbnUtbGlzdHsgcGFkZGluZzoxNnB4IDE4cHggMjZweCAxOHB4OyBkaXNwbGF5OmZsZXg7IGZsZXgtZGlyZWN0aW9uOmNvbHVtbjsgZ2FwOjEwcHg7fQogIC5tZW51LWl0ZW17CiAgICBkaXNwbGF5OmZsZXg7IGFsaWduLWl0ZW1zOmNlbnRlcjsgZ2FwOjE0cHg7CiAgICBwYWRkaW5nOjE0cHggMTRweDsgYm9yZGVyOjFweCBzb2xpZCB2YXIoLS1saW5lKTsgYm9yZGVyLXJhZGl1czoxNnB4OwogICAgYmFja2dyb3VuZDp2YXIoLS1wYXBlcik7IGN1cnNvcjpwb2ludGVyOwogICAgdHJhbnNpdGlvbjogYm9yZGVyLWNvbG9yIC4xNXMgZWFzZSwgdHJhbnNmb3JtIC4xMnMgZWFzZTsKICB9CiAgLm1lbnUtaXRlbTphY3RpdmV7IHRyYW5zZm9ybTpzY2FsZSguOTgpOyB9CiAgLm1lbnUtaXRlbTpob3ZlcnsgYm9yZGVyLWNvbG9yOiNjN2RkY2U7IH0KICAubWVudS1pY29uewogICAgd2lkdGg6NDRweDsgaGVpZ2h0OjQ0cHg7IGJvcmRlci1yYWRpdXM6MTJweDsgZmxleDowIDAgYXV0bzsKICAgIGRpc3BsYXk6ZmxleDsgYWxpZ24taXRlbXM6Y2VudGVyOyBqdXN0aWZ5LWNvbnRlbnQ6Y2VudGVyOyBmb250LXNpemU6MjBweDsKICB9CiAgLm1lbnUtaXRlbS1ib2R5eyBmbGV4OjE7IG1pbi13aWR0aDowOyB9CiAgLm1lbnUtaXRlbS10aXRsZXsgZm9udC1zaXplOjE0LjVweDsgZm9udC13ZWlnaHQ6NzAwOyBtYXJnaW4tYm90dG9tOjJweDsgfQogIC5tZW51LWl0ZW0tc3VieyBmb250LXNpemU6MTEuNXB4OyBjb2xvcjp2YXIoLS1zdWIpOyB9CiAgLm1lbnUtaXRlbS1jb3VudHsKICAgIGZvbnQtc2l6ZToxMC41cHg7IGZvbnQtd2VpZ2h0OjcwMDsgY29sb3I6dmFyKC0ta2lzaS1ncmVlbik7CiAgICBiYWNrZ3JvdW5kOnZhcigtLWtpc2ktZW1lcmFsZC1zb2Z0KTsgcGFkZGluZzozcHggOXB4OyBib3JkZXItcmFkaXVzOjk5OXB4OyBmbGV4OjAgMCBhdXRvOwogIH0KICAubWVudS1jaGV2cm9ueyBjb2xvcjojYzNjZGM3OyBmb250LXNpemU6MThweDsgZmxleDowIDAgYXV0bzsgfQogIC5tZW51LWZvb3Rub3RlewogICAgdGV4dC1hbGlnbjpjZW50ZXI7IGZvbnQtc2l6ZToxMC41cHg7IGNvbG9yOiNhN2IzYWM7IHBhZGRpbmc6NHB4IDMwcHggNHB4IDMwcHg7CiAgfQoKICAvKiA9PT09PT09PT09PT0gU1VCTUVOVSBTQ1JFRU4gKHRvcGlrIGRhbGFtIDEga2F0ZWdvcmkpID09PT09PT09PT09PSAqLwogICNzdWJtZW51LXNjcmVlbnsgdHJhbnNmb3JtOnRyYW5zbGF0ZVgoMTAwJSk7IG92ZXJmbG93LXk6YXV0bzsgfQogICNzdWJtZW51LXNjcmVlbi5hY3RpdmV7IHRyYW5zZm9ybTp0cmFuc2xhdGVYKDApOyB9CiAgLnN1Ym1lbnUtdG9wYmFyewogICAgcGFkZGluZzoxNnB4IDE2cHggNnB4IDE2cHg7CiAgICBkaXNwbGF5OmZsZXg7IGFsaWduLWl0ZW1zOmNlbnRlcjsgZ2FwOjEwcHg7CiAgICBiYWNrZ3JvdW5kOmxpbmVhci1ncmFkaWVudCgxNTVkZWcsIHZhcigtLWtpc2ktZGFyayksIHZhcigtLWtpc2ktZ3JlZW4pIDcwJSk7CiAgICBjb2xvcjojZmZmOyBwb3NpdGlvbjpyZWxhdGl2ZTsgcGFkZGluZy1ib3R0b206MjJweDsKICB9CiAgLnN1Ym1lbnUtdG9wYmFyOjphZnRlcnsKICAgIGNvbnRlbnQ6IiI7IHBvc2l0aW9uOmFic29sdXRlOyBsZWZ0OjA7IHJpZ2h0OjA7IGJvdHRvbTotMXB4OyBoZWlnaHQ6MTZweDsKICAgIGJhY2tncm91bmQ6dmFyKC0tcGFwZXIpOyBib3JkZXItcmFkaXVzOjE2cHggMTZweCAwIDA7CiAgfQogIC5zdWJtZW51LWJhY2t7CiAgICB3aWR0aDozNHB4OyBoZWlnaHQ6MzRweDsgYm9yZGVyLXJhZGl1czoxMHB4OwogICAgZGlzcGxheTpmbGV4OyBhbGlnbi1pdGVtczpjZW50ZXI7IGp1c3RpZnktY29udGVudDpjZW50ZXI7CiAgICBmb250LXNpemU6MjBweDsgY29sb3I6I2ZmZjsgY3Vyc29yOnBvaW50ZXI7IG1hcmdpbi1sZWZ0Oi02cHg7IGZsZXg6MCAwIGF1dG87CiAgfQogIC5zdWJtZW51LWhlYWRpbmctdGl0bGV7IGZvbnQtc2l6ZToxN3B4OyBmb250LXdlaWdodDo4MDA7IH0KICAuc3VibWVudS1oZWFkaW5nLXN1YnsgZm9udC1zaXplOjExLjVweDsgY29sb3I6I2NmZThkYTsgbWFyZ2luLXRvcDoxcHg7IH0KICAuc3VibWVudS1saXN0eyBwYWRkaW5nOjE2cHggMThweCAyNnB4IDE4cHg7IGRpc3BsYXk6ZmxleDsgZmxleC1kaXJlY3Rpb246Y29sdW1uOyBnYXA6MTBweDt9CgogIC8qID09PT09PT09PT09PSBUVVRPUklBTCAoU1dJUEUpIFNDUkVFTiA9PT09PT09PT09PT0gKi8KICAjdHV0LXNjcmVlbnsgdHJhbnNmb3JtOnRyYW5zbGF0ZVgoMTAwJSk7IH0KICAjdHV0LXNjcmVlbi5hY3RpdmV7IHRyYW5zZm9ybTp0cmFuc2xhdGVYKDApOyB9CiAgI21lbnUtc2NyZWVuLmhpZGRlbnsgdHJhbnNmb3JtOnRyYW5zbGF0ZVgoLTI4JSk7IG9wYWNpdHk6MDsgcG9pbnRlci1ldmVudHM6bm9uZTsgfQogICNzdWJtZW51LXNjcmVlbi5oaWRkZW57IHRyYW5zZm9ybTp0cmFuc2xhdGVYKC0yOCUpOyBvcGFjaXR5OjA7IHBvaW50ZXItZXZlbnRzOm5vbmU7IH0KCiAgLnR1dC10b3BiYXJ7CiAgICBwYWRkaW5nOjE0cHggMTZweCAxMHB4IDE2cHg7CiAgICBkaXNwbGF5OmZsZXg7IGFsaWduLWl0ZW1zOmNlbnRlcjsgZ2FwOjEwcHg7CiAgICBiYWNrZ3JvdW5kOnZhcigtLXBhcGVyKTsKICAgIHBvc2l0aW9uOnJlbGF0aXZlOyB6LWluZGV4OjU7CiAgfQogIC50dXQtYmFja3sKICAgIHdpZHRoOjM0cHg7IGhlaWdodDozNHB4OyBib3JkZXItcmFkaXVzOjEwcHg7CiAgICBkaXNwbGF5OmZsZXg7IGFsaWduLWl0ZW1zOmNlbnRlcjsganVzdGlmeS1jb250ZW50OmNlbnRlcjsKICAgIGZvbnQtc2l6ZToyMHB4OyBjb2xvcjp2YXIoLS1pbmspOyBjdXJzb3I6cG9pbnRlcjsgbWFyZ2luLWxlZnQ6LTZweDsKICB9CiAgLnR1dC1oZWFkaW5neyBmbGV4OjE7IG1pbi13aWR0aDowOyB9CiAgLnR1dC1oZWFkaW5nLXRpdGxleyBmb250LXNpemU6MTVweDsgZm9udC13ZWlnaHQ6ODAwOyBsaW5lLWhlaWdodDoxLjI7IH0KICAudHV0LWhlYWRpbmctc3VieyBmb250LXNpemU6MTFweDsgY29sb3I6dmFyKC0tc3ViKTsgbWFyZ2luLXRvcDoxcHg7IH0KCiAgLnByb2dyZXNzLXJvd3sgZGlzcGxheTpmbGV4OyBnYXA6NHB4OyBwYWRkaW5nOjAgMTZweCAxMnB4IDE2cHg7IH0KICAucHJvZ3Jlc3Mtc2VnewogICAgZmxleDoxOyBoZWlnaHQ6NHB4OyBib3JkZXItcmFkaXVzOjNweDsgYmFja2dyb3VuZDp2YXIoLS1saW5lKTsgb3ZlcmZsb3c6aGlkZGVuOwogIH0KICAucHJvZ3Jlc3Mtc2VnID4gaXsKICAgIGRpc3BsYXk6YmxvY2s7IGhlaWdodDoxMDAlOyB3aWR0aDowJTsgYmFja2dyb3VuZDp2YXIoLS1raXNpLWVtZXJhbGQpOwogICAgdHJhbnNpdGlvbjp3aWR0aCAuMjVzIGVhc2U7CiAgfQogIC5wcm9ncmVzcy1zZWcuZG9uZSA+IGl7IHdpZHRoOjEwMCU7IH0KICAucHJvZ3Jlc3Mtc2VnLmFjdGl2ZSA+IGl7IHdpZHRoOjEwMCU7IH0KCiAgLnNsaWRlcy12aWV3cG9ydHsKICAgIGZsZXg6MTsgcG9zaXRpb246cmVsYXRpdmU7IG92ZXJmbG93OmhpZGRlbjsKICAgIHRvdWNoLWFjdGlvbjpwYW4teTsKICB9CiAgLnNsaWRlcy10cmFja3sKICAgIGRpc3BsYXk6ZmxleDsgaGVpZ2h0OjEwMCU7CiAgICB0cmFuc2l0aW9uOiB0cmFuc2Zvcm0gLjMycyBjdWJpYy1iZXppZXIoLjIyLC42MSwuMzYsMSk7CiAgfQogIC5zbGlkZXsKICAgIGZsZXg6MCAwIDEwMCU7IGhlaWdodDoxMDAlOwogICAgZGlzcGxheTpmbGV4OyBmbGV4LWRpcmVjdGlvbjpjb2x1bW47CiAgICBwYWRkaW5nOjRweCAyMHB4IDAgMjBweDsKICAgIG92ZXJmbG93LXk6YXV0bzsKICB9CiAgLnNsaWRlLWltYWdlLXdyYXB7CiAgICAvKiBLb3Rhay9rYXJ0dSBpbmkgZGVmYXVsdG55YSByYXNpbyB0ZXRhcCAxMDgwOjE3NjAgKHRhbXBpbGFuICJub3JtYWwiCiAgICAgICBkaSBsYXlhciBiZXNhci9kZXNrdG9wKS4gS2h1c3VzIGRpIGxheWFyIEhQIChsaWhhdCBtZWRpYSBxdWVyeSBkaQogICAgICAgYmF3YWgpLCBrb3Rha255YSBqYWRpIGZsZWtzaWJlbCDigJQgb3RvbWF0aXMgbWVuZ2VjaWwgYmlhciB0ZWtzCiAgICAgICBwZW5qZWxhc2FuIGRpIGJhd2FobnlhIHNlbGFsdSBsYW5nc3VuZyBrZWxpaGF0YW4gdGFucGEgcGVybHUKICAgICAgIHNjcm9sbCAoa2VjdWFsaSB0ZWtzbnlhIG1lbWFuZyBwYW5qYW5nKS4gR2FtYmFyIHRpZGFrIHBlcm5haAogICAgICAgdGVycG90b25nIChvYmplY3QtZml0OmNvbnRhaW4pLCBvcmFuZyB0aW5nZ2FsIHBpbmNoLXpvb20gc2VuZGlyaQogICAgICAga2FsYXUgbWF1IGxpaGF0IGRldGFpbCBnYW1iYXJueWEgbGViaWggamVsYXMuICovCiAgICB3aWR0aDoxMDAlOyBhc3BlY3QtcmF0aW86IDEwODAgLyAxNzYwOyBmbGV4OjAgMCBhdXRvOwogICAgYm9yZGVyLXJhZGl1czoyMHB4OyBvdmVyZmxvdzpoaWRkZW47CiAgICBiYWNrZ3JvdW5kOmxpbmVhci1ncmFkaWVudCgxNjBkZWcsI2VlZjVmMCwjZTJlZWU2KTsKICAgIGRpc3BsYXk6ZmxleDsgYWxpZ24taXRlbXM6Y2VudGVyOyBqdXN0aWZ5LWNvbnRlbnQ6Y2VudGVyOwogICAgcG9zaXRpb246cmVsYXRpdmU7IG1hcmdpbi1ib3R0b206MTRweDsKICAgIGJvcmRlcjoxcHggc29saWQgdmFyKC0tbGluZSk7CiAgfQogIC5zbGlkZS1pbWFnZS13cmFwIGltZ3sKICAgIG1heC13aWR0aDoxMDAlOyBtYXgtaGVpZ2h0OjEwMCU7IHdpZHRoOmF1dG87IGhlaWdodDphdXRvOwogICAgb2JqZWN0LWZpdDpjb250YWluOyBkaXNwbGF5OmJsb2NrOwogICAgYm9yZGVyLXJhZGl1czoyMHB4OyAvKiBkaXBhc2FuZyBsYW5nc3VuZyBkaSBnYW1iYXIganVnYSwgamFnYS1qYWdhIGthbGF1IHJvdW5kaW5nIGRhcmkgcGFyZW50IGdhZ2FsIGtlLXJlbmRlciBkaSBzZWJhZ2lhbiBicm93c2VyIEhQICovCiAgfQogIEBtZWRpYSAobWF4LXdpZHRoOiA0ODBweCl7CiAgICAuc2xpZGUtaW1hZ2Utd3JhcC5oYXMtaW1hZ2V7CiAgICAgIGFzcGVjdC1yYXRpbzphdXRvOyBmbGV4OjEgMSBhdXRvOyBtaW4taGVpZ2h0OjkwcHg7CiAgICAgIGJhY2tncm91bmQ6bm9uZTsgYm9yZGVyOm5vbmU7CiAgICB9CiAgfQogIC5zbGlkZS1pbWFnZS1wbGFjZWhvbGRlcnsKICAgIGRpc3BsYXk6ZmxleDsgZmxleC1kaXJlY3Rpb246Y29sdW1uOyBhbGlnbi1pdGVtczpjZW50ZXI7IGdhcDo4cHg7CiAgICBjb2xvcjojOWZiM2E4OyBwYWRkaW5nOjIwcHg7IHRleHQtYWxpZ246Y2VudGVyOwogIH0KICAuc2xpZGUtaW1hZ2UtcGxhY2Vob2xkZXIgLnBoLWljb257IGZvbnQtc2l6ZTozMHB4OyB9CiAgLnNsaWRlLWltYWdlLXBsYWNlaG9sZGVyIC5waC1sYWJlbHsgZm9udC1zaXplOjExLjVweDsgZm9udC13ZWlnaHQ6NjAwOyBsaW5lLWhlaWdodDoxLjU7IH0KICAuc2xpZGUtc3RlcC10YWd7CiAgICBwb3NpdGlvbjphYnNvbHV0ZTsgdG9wOjEycHg7IGxlZnQ6MTJweDsKICAgIGJhY2tncm91bmQ6cmdiYSgyMCw2Nyw0NCwuODIpOyBjb2xvcjojZmZmOyBmb250LXNpemU6MTAuNXB4OyBmb250LXdlaWdodDo3MDA7CiAgICBwYWRkaW5nOjVweCAxMHB4OyBib3JkZXItcmFkaXVzOjk5OXB4OyBsZXR0ZXItc3BhY2luZzouM3B4OwogIH0KICAuc2xpZGUtdGV4dHsgZmxleDowIDAgYXV0bzsgcGFkZGluZy1ib3R0b206MTRweDsgfQogIC5zbGlkZS10aXRsZXsgZm9udC1zaXplOjE3cHg7IGZvbnQtd2VpZ2h0OjgwMDsgbWFyZ2luOjAgMCA2cHggMDsgbGV0dGVyLXNwYWNpbmc6LS4ycHg7IH0KICAuc2xpZGUtZGVzY3sgZm9udC1zaXplOjEzcHg7IGNvbG9yOnZhcigtLXN1Yik7IGxpbmUtaGVpZ2h0OjEuNTU7IG1hcmdpbjowOyB9CgogIC50dXQtbmF2ewogICAgZGlzcGxheTpmbGV4OyBhbGlnbi1pdGVtczpjZW50ZXI7IGdhcDoxMHB4OwogICAgcGFkZGluZzoxMnB4IDIwcHggMjJweCAyMHB4OwogIH0KICAubmF2LWJ0bnsKICAgIGZsZXg6MTsgcGFkZGluZzoxM3B4OyBib3JkZXItcmFkaXVzOjE0cHg7IHRleHQtYWxpZ246Y2VudGVyOwogICAgZm9udC1zaXplOjE0cHg7IGZvbnQtd2VpZ2h0OjgwMDsgY3Vyc29yOnBvaW50ZXI7IGJvcmRlcjpub25lOwogICAgdHJhbnNpdGlvbjogb3BhY2l0eSAuMTVzIGVhc2UsIHRyYW5zZm9ybSAuMTJzIGVhc2U7CiAgfQogIC5uYXYtYnRuOmFjdGl2ZXsgdHJhbnNmb3JtOnNjYWxlKC45OCk7IH0KICAubmF2LXByZXZ7IGJhY2tncm91bmQ6dmFyKC0tYmcpOyBjb2xvcjp2YXIoLS1pbmspOyBmbGV4OjAgMCA3NnB4OyB9CiAgLm5hdi1wcmV2W2Rpc2FibGVkXXsgb3BhY2l0eTouMzU7IHBvaW50ZXItZXZlbnRzOm5vbmU7IH0KICAubmF2LW5leHR7IGJhY2tncm91bmQ6dmFyKC0ta2lzaS1ncmVlbik7IGNvbG9yOiNmZmY7IH0KCiAgLyogdGFwIHpvbmVzIGZvciBzd2lwZS1saWtlIG5hdmlnYXRpb24gb24gZGVza3RvcCAqLwogIC50YXAtem9uZXsgcG9zaXRpb246YWJzb2x1dGU7IHRvcDowOyBib3R0b206MDsgd2lkdGg6MjYlOyB6LWluZGV4OjI7IGN1cnNvcjpwb2ludGVyOyB9CiAgLnRhcC16b25lLmxlZnR7IGxlZnQ6MDsgfQogIC50YXAtem9uZS5yaWdodHsgcmlnaHQ6MDsgfQoKICAvKiBjb21wbGV0aW9uIG5vdGUgKi8KICAuZW5kLWJhZGdlewogICAgZGlzcGxheTppbmxpbmUtZmxleDsgYWxpZ24taXRlbXM6Y2VudGVyOyBnYXA6NnB4OwogICAgZm9udC1zaXplOjExcHg7IGZvbnQtd2VpZ2h0OjcwMDsgY29sb3I6dmFyKC0ta2lzaS1ncmVlbik7CiAgICBiYWNrZ3JvdW5kOnZhcigtLWtpc2ktZW1lcmFsZC1zb2Z0KTsgcGFkZGluZzo1cHggMTBweDsgYm9yZGVyLXJhZGl1czo5OTlweDsKICAgIG1hcmdpbi1ib3R0b206OHB4OwogIH0KCiAgOjotd2Via2l0LXNjcm9sbGJhcnsgd2lkdGg6MDsgaGVpZ2h0OjA7IH0KPC9zdHlsZT4KPC9oZWFkPgo8Ym9keT4KCjxkaXYgaWQ9InBob25lIj4KICA8ZGl2IGlkPSJhcHAiPgoKICAgIDwhLS0gPT09PT09PT09PT09IE1FTlUgU0NSRUVOID09PT09PT09PT09PSAtLT4KICAgIDxkaXYgY2xhc3M9InNjcmVlbiIgaWQ9Im1lbnUtc2NyZWVuIj4KICAgICAgPGRpdiBjbGFzcz0ibWVudS1oZWFkZXIiPgogICAgICAgIDxkaXYgY2xhc3M9Im1lbnUtZXllYnJvdyI+UGFuZHVhbiBpS0lTSTwvZGl2PgogICAgICAgIDxoMSBjbGFzcz0ibWVudS10aXRsZSI+UHVzYXQgVHV0b3JpYWw8L2gxPgogICAgICAgIDxwIGNsYXNzPSJtZW51LWRlc2MiPlBpbGloIHRvcGlrIGRpIGJhd2FoIHVudHVrIG1lbGloYXQgcGFuZHVhbiBsYW5na2FoIGRlbWkgbGFuZ2thaC4gR2VzZXIgZ2FtYmFyIGtlIGtpcmkva2FuYW4gdW50dWsgbGFuanV0LjwvcD4KICAgICAgPC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9Im1lbnUtbGlzdCIgaWQ9Im1lbnUtbGlzdCI+PCEtLSBkaWlzaSBvbGVoIEpTIGRhcmkgQ0FURUdPUklFUyAtLT48L2Rpdj4KICAgICAgPGRpdiBjbGFzcz0ibWVudS1mb290bm90ZSI+VGVtcGxhdGUgdHV0b3JpYWwg4oCUIGdhbnRpIGdhbWJhciAmYW1wOyB0ZWtzIGRpIGJhZ2lhbiBkYXRhIHBhZGEga29kZTwvZGl2PgogICAgPC9kaXY+CgogICAgPCEtLSA9PT09PT09PT09PT0gU1VCTUVOVSBTQ1JFRU4gKGRhZnRhciB0b3BpayBwZXIga2F0ZWdvcmkpID09PT09PT09PT09PSAtLT4KICAgIDxkaXYgY2xhc3M9InNjcmVlbiIgaWQ9InN1Ym1lbnUtc2NyZWVuIj4KICAgICAgPGRpdiBjbGFzcz0ic3VibWVudS10b3BiYXIiPgogICAgICAgIDxkaXYgY2xhc3M9InN1Ym1lbnUtYmFjayIgaWQ9ImJ0bi1zdWJtZW51LWJhY2siPuKAuTwvZGl2PgogICAgICAgIDxkaXY+CiAgICAgICAgICA8ZGl2IGNsYXNzPSJzdWJtZW51LWhlYWRpbmctdGl0bGUiIGlkPSJzdWJtZW51LXRpdGxlIj5LYXRlZ29yaTwvZGl2PgogICAgICAgICAgPGRpdiBjbGFzcz0ic3VibWVudS1oZWFkaW5nLXN1YiIgaWQ9InN1Ym1lbnUtc3ViIj5QaWxpaCB0b3BpayB0dXRvcmlhbDwvZGl2PgogICAgICAgIDwvZGl2PgogICAgICA8L2Rpdj4KICAgICAgPGRpdiBjbGFzcz0ic3VibWVudS1saXN0IiBpZD0ic3VibWVudS1saXN0Ij48IS0tIGRpaXNpIG9sZWggSlMgLS0+PC9kaXY+CiAgICA8L2Rpdj4KCiAgICA8IS0tID09PT09PT09PT09PSBUVVRPUklBTCBTQ1JFRU4gPT09PT09PT09PT09IC0tPgogICAgPGRpdiBjbGFzcz0ic2NyZWVuIiBpZD0idHV0LXNjcmVlbiI+CiAgICAgIDxkaXYgY2xhc3M9InR1dC10b3BiYXIiPgogICAgICAgIDxkaXYgY2xhc3M9InR1dC1iYWNrIiBpZD0iYnRuLWJhY2siPuKAuTwvZGl2PgogICAgICAgIDwhLS0gYmFjayBkaSBzaW5pIGFrYW4ga2VtYmFsaSBrZSBzdWJtZW51IHRvcGlrIChidWthbiBrZSBtZW51IGthdGVnb3JpKSAtLT4KICAgICAgICA8ZGl2IGNsYXNzPSJ0dXQtaGVhZGluZyI+CiAgICAgICAgICA8ZGl2IGNsYXNzPSJ0dXQtaGVhZGluZy10aXRsZSIgaWQ9InR1dC10aXRsZSI+SnVkdWwgVHV0b3JpYWw8L2Rpdj4KICAgICAgICAgIDxkaXYgY2xhc3M9InR1dC1oZWFkaW5nLXN1YiIgaWQ9InR1dC1zdGVwLWxhYmVsIj5MYW5na2FoIDEgZGFyaSA1PC9kaXY+CiAgICAgICAgPC9kaXY+CiAgICAgIDwvZGl2PgogICAgICA8ZGl2IGNsYXNzPSJwcm9ncmVzcy1yb3ciIGlkPSJwcm9ncmVzcy1yb3ciPjwvZGl2PgoKICAgICAgPGRpdiBjbGFzcz0ic2xpZGVzLXZpZXdwb3J0IiBpZD0ic2xpZGVzLXZpZXdwb3J0Ij4KICAgICAgICA8ZGl2IGNsYXNzPSJ0YXAtem9uZSBsZWZ0IiBpZD0iem9uZS1wcmV2Ij48L2Rpdj4KICAgICAgICA8ZGl2IGNsYXNzPSJ0YXAtem9uZSByaWdodCIgaWQ9InpvbmUtbmV4dCI+PC9kaXY+CiAgICAgICAgPGRpdiBjbGFzcz0ic2xpZGVzLXRyYWNrIiBpZD0ic2xpZGVzLXRyYWNrIj48IS0tIGRpaXNpIG9sZWggSlMgLS0+PC9kaXY+CiAgICAgIDwvZGl2PgoKICAgICAgPGRpdiBjbGFzcz0idHV0LW5hdiI+CiAgICAgICAgPGJ1dHRvbiBjbGFzcz0ibmF2LWJ0biBuYXYtcHJldiIgaWQ9ImJ0bi1wcmV2Ij5LZW1iYWxpPC9idXR0b24+CiAgICAgICAgPGJ1dHRvbiBjbGFzcz0ibmF2LWJ0biBuYXYtbmV4dCIgaWQ9ImJ0bi1uZXh0Ij5MYW5qdXQ8L2J1dHRvbj4KICAgICAgPC9kaXY+CiAgICA8L2Rpdj4KCiAgPC9kaXY+CjwvZGl2PgoKPHNjcmlwdD4KLyogPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQogICBEQVRBIFRVVE9SSUFMIOKAlCBFRElUIERJIFNJTkkKICAgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQogICBTdHJ1a3R1ciAyIGxldmVsOgogICAgIENBVEVHT1JJRVMgICAgICAgICAgICA8LSBsZXZlbCAxOiBrYXRlZ29yaSBiZXNhciAoU2FoYW0sIFJla3NhIERhbmEsIGRzdCkKICAgICAgIOKUlOKUgOKUgCBpdGVtc1tdICAgICAgICAgPC0gbGV2ZWwgMjogdG9waWsgdHV0b3JpYWwgKENhcmEgQmVsaSwgQ2FyYSBKdWFsLCBkc3QpCiAgICAgICAgICAgICDilJTilIDilIAgc2xpZGVzW10gIDwtIGlzaSB0dXRvcmlhbCAoZ2FtYmFyICsganVkdWwgKyBkZXNrcmlwc2kgdGlhcCBsYW5na2FoKQoKICAgQ2FyYSBuYW1iYWgga2F0ZWdvcmkgYmFydTogY29weSAxIGJsb2sgb2JqZWsgZGkgQ0FURUdPUklFUywgZ2FudGkgaWQvdGl0bGUvaWNvbi90aW50LgogICBDYXJhIG5hbWJhaCB0b3BpayBiYXJ1IGRpIDEga2F0ZWdvcmk6IGNvcHkgMSBibG9rIG9iamVrIGRpIGRhbGFtICJpdGVtcyIuCiAgIENhcmEgbmFtYmFoIGxhbmdrYWggYmFydSBkaSAxIHRvcGlrOiBjb3B5IDEgYmxvayBvYmplayBkaSBkYWxhbSAic2xpZGVzIi4KCiAgIEZPUk1BVCBTTElERSBQQUxJTkcgU0lNUEVMIChkaXBha2FpIHVudHVrIGxhbmdrYWggYmFydSkg4oCUIGN1a3VwIDIgaXNpYW46CiAgICAgeyBpbWFnZTogImxpbmsgYXRhdSBiYXNlNjQgZ2FtYmFyIiwgdGV4dDogInBlbmplbGFzYW4gbGFuZ2thaCBpbmkiIH0KICAgQ29udG9oOgogICAgIHsgaW1hZ2U6ICJodHRwczovL2NvbnRvaC5jb20vc2NyZWVuc2hvdDEucG5nIiwgdGV4dDogIktldHVrIG1lbnUgVHJhZGluZyBkaSBoYWxhbWFuIHV0YW1hLiIgfQoKICAgc2xpZGUuaW1hZ2U6IFVSTC9iYXNlNjQgZ2FtYmFyIChrb3NvbmdrYW4gIiIgdW50dWsgcGFrYWkgcGxhY2Vob2xkZXIgYWJ1LWFidSkuCiAgIFVrdXJhbiBnYW1iYXIgZGlzYXJhbmthbiAxMDgweDE3NjBweCAocmFzaW8gMToxLjYzKSBiaWFyIHBhcyBtZW5naXNpIGtvdGFrLgoKICAgKEZvcm1hdCBsYW1hIHsgaW1hZ2UsIHRpdGxlLCBkZXNjIH0gZGVuZ2FuIGp1ZHVsIHRlcnBpc2FoIG1hc2loIHRldGFwCiAgIGRpZHVrdW5nIGRhbiB0aWRhayBwZXJsdSBkaXViYWgg4oCUIGN1a3VwIGRpcGFrYWkgdW50dWsgbGFuZ2thaCBiYXJ1IHNhamEuKQogICA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09ICovCg==";
-const EXPORT_FOOTER_B64 = "Ci8qID09PT09PT09PT09PT09PT09PT09PT09PT0gUkVOREVSICYgTE9HSUMgPT09PT09PT09PT09PT09PT09PT09PT09PSAqLwpjb25zdCBtZW51TGlzdCA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdtZW51LWxpc3QnKTsKY29uc3Qgc3VibWVudVNjcmVlbiA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdzdWJtZW51LXNjcmVlbicpOwpjb25zdCBzdWJtZW51TGlzdCA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdzdWJtZW51LWxpc3QnKTsKY29uc3Qgc3VibWVudVRpdGxlID0gZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ3N1Ym1lbnUtdGl0bGUnKTsKY29uc3Qgc3VibWVudVN1YiA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdzdWJtZW51LXN1YicpOwpjb25zdCB0dXRTY3JlZW4gPSBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgndHV0LXNjcmVlbicpOwpjb25zdCBtZW51U2NyZWVuID0gZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ21lbnUtc2NyZWVuJyk7CmNvbnN0IHNsaWRlc1RyYWNrID0gZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ3NsaWRlcy10cmFjaycpOwpjb25zdCBwcm9ncmVzc1JvdyA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdwcm9ncmVzcy1yb3cnKTsKY29uc3QgdHV0VGl0bGUgPSBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgndHV0LXRpdGxlJyk7CmNvbnN0IHR1dFN0ZXBMYWJlbCA9IGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCd0dXQtc3RlcC1sYWJlbCcpOwpjb25zdCBidG5QcmV2ID0gZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ2J0bi1wcmV2Jyk7CmNvbnN0IGJ0bk5leHQgPSBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnYnRuLW5leHQnKTsKCmxldCBjdXJyZW50Q2F0ZWdvcnkgPSBudWxsOwpsZXQgY3VycmVudFR1dG9yaWFsID0gbnVsbDsKbGV0IGN1cnJlbnRJbmRleCA9IDA7CgpmdW5jdGlvbiBjb3VudFNsaWRlcyhjYXQpewogIHJldHVybiBjYXQuaXRlbXMucmVkdWNlKChzdW0sIGl0KSA9PiBzdW0gKyBpdC5zbGlkZXMubGVuZ3RoLCAwKTsKfQoKLyogLS0tLS0tLS0tLSBMRVZFTCAxOiBkYWZ0YXIga2F0ZWdvcmkgLS0tLS0tLS0tLSAqLwpmdW5jdGlvbiByZW5kZXJNZW51KCl7CiAgbWVudUxpc3QuaW5uZXJIVE1MID0gJyc7CiAgQ0FURUdPUklFUy5mb3JFYWNoKGNhdCA9PiB7CiAgICBjb25zdCBpdGVtID0gZG9jdW1lbnQuY3JlYXRlRWxlbWVudCgnZGl2Jyk7CiAgICBpdGVtLmNsYXNzTmFtZSA9ICdtZW51LWl0ZW0nOwogICAgaXRlbS5pbm5lckhUTUwgPSBgCiAgICAgIDxkaXYgY2xhc3M9Im1lbnUtaWNvbiIgc3R5bGU9ImJhY2tncm91bmQ6JHtjYXQudGludH0iPiR7Y2F0Lmljb259PC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9Im1lbnUtaXRlbS1ib2R5Ij4KICAgICAgICA8ZGl2IGNsYXNzPSJtZW51LWl0ZW0tdGl0bGUiPiR7Y2F0LnRpdGxlfTwvZGl2PgogICAgICAgIDxkaXYgY2xhc3M9Im1lbnUtaXRlbS1zdWIiPiR7Y2F0LmRlc2MgfHwgKGNhdC5pdGVtcy5sZW5ndGggKyAnIHRvcGlrJyl9PC9kaXY+CiAgICAgIDwvZGl2PgogICAgICA8ZGl2IGNsYXNzPSJtZW51LWl0ZW0tY291bnQiPiR7Y2F0Lml0ZW1zLmxlbmd0aH08L2Rpdj4KICAgICAgPGRpdiBjbGFzcz0ibWVudS1jaGV2cm9uIj7igLo8L2Rpdj4KICAgIGA7CiAgICBpdGVtLmFkZEV2ZW50TGlzdGVuZXIoJ2NsaWNrJywgKCkgPT4gb3BlbkNhdGVnb3J5KGNhdC5pZCkpOwogICAgbWVudUxpc3QuYXBwZW5kQ2hpbGQoaXRlbSk7CiAgfSk7Cn0KCi8qIC0tLS0tLS0tLS0gTEVWRUwgMjogZGFmdGFyIHRvcGlrIGRhbGFtIDEga2F0ZWdvcmkgLS0tLS0tLS0tLSAqLwpmdW5jdGlvbiBvcGVuQ2F0ZWdvcnkoaWQpewogIGN1cnJlbnRDYXRlZ29yeSA9IENBVEVHT1JJRVMuZmluZChjID0+IGMuaWQgPT09IGlkKTsKICBzdWJtZW51VGl0bGUudGV4dENvbnRlbnQgPSBjdXJyZW50Q2F0ZWdvcnkudGl0bGU7CiAgc3VibWVudVN1Yi50ZXh0Q29udGVudCA9IGAke2N1cnJlbnRDYXRlZ29yeS5pdGVtcy5sZW5ndGh9IHRvcGlrIHR1dG9yaWFsYDsKICBzdWJtZW51TGlzdC5pbm5lckhUTUwgPSAnJzsKICBjdXJyZW50Q2F0ZWdvcnkuaXRlbXMuZm9yRWFjaChpdCA9PiB7CiAgICBjb25zdCByb3cgPSBkb2N1bWVudC5jcmVhdGVFbGVtZW50KCdkaXYnKTsKICAgIHJvdy5jbGFzc05hbWUgPSAnbWVudS1pdGVtJzsKICAgIHJvdy5pbm5lckhUTUwgPSBgCiAgICAgIDxkaXYgY2xhc3M9Im1lbnUtaWNvbiIgc3R5bGU9ImJhY2tncm91bmQ6JHtjdXJyZW50Q2F0ZWdvcnkudGludH0iPvCfk4Q8L2Rpdj4KICAgICAgPGRpdiBjbGFzcz0ibWVudS1pdGVtLWJvZHkiPgogICAgICAgIDxkaXYgY2xhc3M9Im1lbnUtaXRlbS10aXRsZSI+JHtpdC50aXRsZX08L2Rpdj4KICAgICAgICA8ZGl2IGNsYXNzPSJtZW51LWl0ZW0tc3ViIj4ke2l0LnNsaWRlcy5sZW5ndGh9IGxhbmdrYWg8L2Rpdj4KICAgICAgPC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9Im1lbnUtaXRlbS1jb3VudCI+JHtpdC5zbGlkZXMubGVuZ3RofTwvZGl2PgogICAgICA8ZGl2IGNsYXNzPSJtZW51LWNoZXZyb24iPuKAujwvZGl2PgogICAgYDsKICAgIHJvdy5hZGRFdmVudExpc3RlbmVyKCdjbGljaycsICgpID0+IG9wZW5UdXRvcmlhbChpdC5pZCkpOwogICAgc3VibWVudUxpc3QuYXBwZW5kQ2hpbGQocm93KTsKICB9KTsKICBzdWJtZW51U2NyZWVuLmNsYXNzTGlzdC5hZGQoJ2FjdGl2ZScpOwogIG1lbnVTY3JlZW4uY2xhc3NMaXN0LmFkZCgnaGlkZGVuJyk7Cn0KCmZ1bmN0aW9uIGNsb3NlU3VibWVudSgpewogIHN1Ym1lbnVTY3JlZW4uY2xhc3NMaXN0LnJlbW92ZSgnYWN0aXZlJyk7CiAgbWVudVNjcmVlbi5jbGFzc0xpc3QucmVtb3ZlKCdoaWRkZW4nKTsKfQoKLyogLS0tLS0tLS0tLSBMRVZFTCAzOiBzbGlkZSB0dXRvcmlhbCAtLS0tLS0tLS0tICovCmZ1bmN0aW9uIG9wZW5UdXRvcmlhbChpZCl7CiAgY3VycmVudFR1dG9yaWFsID0gY3VycmVudENhdGVnb3J5Lml0ZW1zLmZpbmQodCA9PiB0LmlkID09PSBpZCk7CiAgY3VycmVudEluZGV4ID0gMDsKICB0dXRUaXRsZS50ZXh0Q29udGVudCA9IGN1cnJlbnRUdXRvcmlhbC50aXRsZTsKICBidWlsZFNsaWRlcygpOwogIGJ1aWxkUHJvZ3Jlc3MoKTsKICBnb1RvU2xpZGUoMCwgZmFsc2UpOwogIHR1dFNjcmVlbi5jbGFzc0xpc3QuYWRkKCdhY3RpdmUnKTsKICBzdWJtZW51U2NyZWVuLmNsYXNzTGlzdC5hZGQoJ2hpZGRlbicpOwp9CgpmdW5jdGlvbiBjbG9zZVR1dG9yaWFsKCl7CiAgdHV0U2NyZWVuLmNsYXNzTGlzdC5yZW1vdmUoJ2FjdGl2ZScpOwogIHN1Ym1lbnVTY3JlZW4uY2xhc3NMaXN0LnJlbW92ZSgnaGlkZGVuJyk7Cn0KCmZ1bmN0aW9uIGVzY2FwZUh0bWwoc3RyKXsKICByZXR1cm4gU3RyaW5nKHN0cikKICAgIC5yZXBsYWNlKC8mL2csICcmYW1wOycpCiAgICAucmVwbGFjZSgvPC9nLCAnJmx0OycpCiAgICAucmVwbGFjZSgvPi9nLCAnJmd0OycpOwp9CmZ1bmN0aW9uIGZvcm1hdERlc2NUZXh0KHN0cil7CiAgcmV0dXJuIGVzY2FwZUh0bWwoc3RyKQogICAgLnJlcGxhY2UoL1wqXCooLis/KVwqXCovZywgJzxzdHJvbmc+JDE8L3N0cm9uZz4nKQogICAgLnJlcGxhY2UoL1xuL2csICc8YnI+Jyk7Cn0KCmZ1bmN0aW9uIGJ1aWxkU2xpZGVzKCl7CiAgc2xpZGVzVHJhY2suaW5uZXJIVE1MID0gJyc7CiAgY3VycmVudFR1dG9yaWFsLnNsaWRlcy5mb3JFYWNoKChzLCBpKSA9PiB7CiAgICBjb25zdCBzbGlkZSA9IGRvY3VtZW50LmNyZWF0ZUVsZW1lbnQoJ2RpdicpOwogICAgc2xpZGUuY2xhc3NOYW1lID0gJ3NsaWRlJzsKICAgIC8vIEZvcm1hdCBzaW1wZWwgYmFydTogY3VrdXAgaXNpIHsgaW1hZ2UsIHRleHQgfS4KICAgIC8vIEZvcm1hdCBsYW1hIHsgaW1hZ2UsIHRpdGxlLCBkZXNjIH0gbWFzaWggdGV0YXAgZGlkdWt1bmcgb3RvbWF0aXMuCiAgICBjb25zdCBoYXNTaW1wbGVUZXh0ID0gcy50ZXh0ICE9PSB1bmRlZmluZWQ7CiAgICBjb25zdCBhbHRUZXh0ID0gcy50aXRsZSB8fCBgTGFuZ2thaCAke2krMX1gOwogICAgY29uc3QgaW1nSHRtbCA9IHMuaW1hZ2UKICAgICAgPyBgPGltZyBzcmM9IiR7cy5pbWFnZX0iIGFsdD0iJHthbHRUZXh0fSI+YAogICAgICA6IGA8ZGl2IGNsYXNzPSJzbGlkZS1pbWFnZS1wbGFjZWhvbGRlciI+CiAgICAgICAgICAgPGRpdiBjbGFzcz0icGgtaWNvbiI+8J+WvO+4jzwvZGl2PgogICAgICAgICAgIDxkaXYgY2xhc3M9InBoLWxhYmVsIj5HYW50aSBkZW5nYW4gc2NyZWVuc2hvdDxicj5sYW5na2FoICR7aSsxfTwvZGl2PgogICAgICAgICA8L2Rpdj5gOwogICAgY29uc3QgdGV4dEh0bWwgPSBoYXNTaW1wbGVUZXh0CiAgICAgID8gYDxwIGNsYXNzPSJzbGlkZS1kZXNjIj4ke2Zvcm1hdERlc2NUZXh0KHMudGV4dCl9PC9wPmAKICAgICAgOiBgPGgyIGNsYXNzPSJzbGlkZS10aXRsZSI+JHtlc2NhcGVIdG1sKHMudGl0bGUpfTwvaDI+CiAgICAgICAgIDxwIGNsYXNzPSJzbGlkZS1kZXNjIj4ke2Zvcm1hdERlc2NUZXh0KHMuZGVzYyl9PC9wPmA7CiAgICBzbGlkZS5pbm5lckhUTUwgPSBgCiAgICAgIDxkaXYgY2xhc3M9InNsaWRlLWltYWdlLXdyYXAke3MuaW1hZ2UgPyAnIGhhcy1pbWFnZScgOiAnJ30iPgogICAgICAgIDxkaXYgY2xhc3M9InNsaWRlLXN0ZXAtdGFnIj4ke2krMX0gLyAke2N1cnJlbnRUdXRvcmlhbC5zbGlkZXMubGVuZ3RofTwvZGl2PgogICAgICAgICR7aW1nSHRtbH0KICAgICAgPC9kaXY+CiAgICAgIDxkaXYgY2xhc3M9InNsaWRlLXRleHQiPgogICAgICAgICR7dGV4dEh0bWx9CiAgICAgIDwvZGl2PgogICAgYDsKICAgIHNsaWRlc1RyYWNrLmFwcGVuZENoaWxkKHNsaWRlKTsKICB9KTsKfQoKZnVuY3Rpb24gYnVpbGRQcm9ncmVzcygpewogIHByb2dyZXNzUm93LmlubmVySFRNTCA9ICcnOwogIGN1cnJlbnRUdXRvcmlhbC5zbGlkZXMuZm9yRWFjaCgoKSA9PiB7CiAgICBjb25zdCBzZWcgPSBkb2N1bWVudC5jcmVhdGVFbGVtZW50KCdkaXYnKTsKICAgIHNlZy5jbGFzc05hbWUgPSAncHJvZ3Jlc3Mtc2VnJzsKICAgIHNlZy5pbm5lckhUTUwgPSAnPGk+PC9pPic7CiAgICBwcm9ncmVzc1Jvdy5hcHBlbmRDaGlsZChzZWcpOwogIH0pOwp9CgpmdW5jdGlvbiB1cGRhdGVQcm9ncmVzcygpewogIGNvbnN0IHNlZ3MgPSBwcm9ncmVzc1Jvdy5jaGlsZHJlbjsKICBmb3IobGV0IGk9MDsgaTxzZWdzLmxlbmd0aDsgaSsrKXsKICAgIHNlZ3NbaV0uY2xhc3NMaXN0LnJlbW92ZSgnZG9uZScsJ2FjdGl2ZScpOwogICAgaWYoaSA8IGN1cnJlbnRJbmRleCkgc2Vnc1tpXS5jbGFzc0xpc3QuYWRkKCdkb25lJyk7CiAgICBlbHNlIGlmKGkgPT09IGN1cnJlbnRJbmRleCkgc2Vnc1tpXS5jbGFzc0xpc3QuYWRkKCdhY3RpdmUnKTsKICB9Cn0KCmZ1bmN0aW9uIGdvVG9TbGlkZShpbmRleCwgYW5pbWF0ZSA9IHRydWUpewogIGNvbnN0IG1heCA9IGN1cnJlbnRUdXRvcmlhbC5zbGlkZXMubGVuZ3RoIC0gMTsKICBjdXJyZW50SW5kZXggPSBNYXRoLm1heCgwLCBNYXRoLm1pbihtYXgsIGluZGV4KSk7CiAgc2xpZGVzVHJhY2suc3R5bGUudHJhbnNpdGlvbiA9IGFuaW1hdGUgPyAnJyA6ICdub25lJzsKICBzbGlkZXNUcmFjay5zdHlsZS50cmFuc2Zvcm0gPSBgdHJhbnNsYXRlWCgtJHtjdXJyZW50SW5kZXggKiAxMDB9JSlgOwogIGlmKCFhbmltYXRlKXsgcmVxdWVzdEFuaW1hdGlvbkZyYW1lKCgpPT57IHNsaWRlc1RyYWNrLnN0eWxlLnRyYW5zaXRpb249Jyc7IH0pOyB9CiAgdXBkYXRlUHJvZ3Jlc3MoKTsKICB0dXRTdGVwTGFiZWwudGV4dENvbnRlbnQgPSBgTGFuZ2thaCAke2N1cnJlbnRJbmRleCsxfSBkYXJpICR7Y3VycmVudFR1dG9yaWFsLnNsaWRlcy5sZW5ndGh9YDsKICBidG5QcmV2LmRpc2FibGVkID0gY3VycmVudEluZGV4ID09PSAwOwogIGJ0bk5leHQudGV4dENvbnRlbnQgPSBjdXJyZW50SW5kZXggPT09IG1heCA/ICdTZWxlc2FpJyA6ICdMYW5qdXQnOwp9CgpidG5OZXh0LmFkZEV2ZW50TGlzdGVuZXIoJ2NsaWNrJywgKCkgPT4gewogIGNvbnN0IG1heCA9IGN1cnJlbnRUdXRvcmlhbC5zbGlkZXMubGVuZ3RoIC0gMTsKICBpZihjdXJyZW50SW5kZXggPT09IG1heCl7IGNsb3NlVHV0b3JpYWwoKTsgfQogIGVsc2V7IGdvVG9TbGlkZShjdXJyZW50SW5kZXggKyAxKTsgfQp9KTsKYnRuUHJldi5hZGRFdmVudExpc3RlbmVyKCdjbGljaycsICgpID0+IGdvVG9TbGlkZShjdXJyZW50SW5kZXggLSAxKSk7CmRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCd6b25lLW5leHQnKS5hZGRFdmVudExpc3RlbmVyKCdjbGljaycsICgpID0+IHsKICBjb25zdCBtYXggPSBjdXJyZW50VHV0b3JpYWwuc2xpZGVzLmxlbmd0aCAtIDE7CiAgaWYoY3VycmVudEluZGV4IDwgbWF4KSBnb1RvU2xpZGUoY3VycmVudEluZGV4ICsgMSk7Cn0pOwpkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnem9uZS1wcmV2JykuYWRkRXZlbnRMaXN0ZW5lcignY2xpY2snLCAoKSA9PiB7CiAgaWYoY3VycmVudEluZGV4ID4gMCkgZ29Ub1NsaWRlKGN1cnJlbnRJbmRleCAtIDEpOwp9KTsKZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ2J0bi1iYWNrJykuYWRkRXZlbnRMaXN0ZW5lcignY2xpY2snLCBjbG9zZVR1dG9yaWFsKTsKZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ2J0bi1zdWJtZW51LWJhY2snKS5hZGRFdmVudExpc3RlbmVyKCdjbGljaycsIGNsb3NlU3VibWVudSk7CgovKiAtLS0tLS0tLS0tIHN3aXBlIGdlc3R1cmUgKHRvdWNoICsgbW91c2UpIC0tLS0tLS0tLS0gKi8KY29uc3Qgdmlld3BvcnQgPSBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnc2xpZGVzLXZpZXdwb3J0Jyk7CmxldCBzdGFydFggPSAwLCBkZWx0YVggPSAwLCBkcmFnZ2luZyA9IGZhbHNlOwoKZnVuY3Rpb24gZHJhZ1N0YXJ0KHgpeyBkcmFnZ2luZyA9IHRydWU7IHN0YXJ0WCA9IHg7IGRlbHRhWCA9IDA7IHNsaWRlc1RyYWNrLnN0eWxlLnRyYW5zaXRpb24gPSAnbm9uZSc7IH0KZnVuY3Rpb24gZHJhZ01vdmUoeCl7CiAgaWYoIWRyYWdnaW5nKSByZXR1cm47CiAgZGVsdGFYID0geCAtIHN0YXJ0WDsKICBjb25zdCBiYXNlID0gLWN1cnJlbnRJbmRleCAqIHZpZXdwb3J0LmNsaWVudFdpZHRoOwogIHNsaWRlc1RyYWNrLnN0eWxlLnRyYW5zZm9ybSA9IGB0cmFuc2xhdGVYKCR7YmFzZSArIGRlbHRhWH1weClgOwp9CmZ1bmN0aW9uIGRyYWdFbmQoKXsKICBpZighZHJhZ2dpbmcpIHJldHVybjsKICBkcmFnZ2luZyA9IGZhbHNlOwogIHNsaWRlc1RyYWNrLnN0eWxlLnRyYW5zaXRpb24gPSAnJzsKICBjb25zdCB0aHJlc2hvbGQgPSB2aWV3cG9ydC5jbGllbnRXaWR0aCAqIDAuMTg7CiAgaWYoZGVsdGFYIDwgLXRocmVzaG9sZCAmJiBjdXJyZW50SW5kZXggPCBjdXJyZW50VHV0b3JpYWwuc2xpZGVzLmxlbmd0aCAtIDEpewogICAgZ29Ub1NsaWRlKGN1cnJlbnRJbmRleCArIDEpOwogIH0gZWxzZSBpZihkZWx0YVggPiB0aHJlc2hvbGQgJiYgY3VycmVudEluZGV4ID4gMCl7CiAgICBnb1RvU2xpZGUoY3VycmVudEluZGV4IC0gMSk7CiAgfSBlbHNlIHsKICAgIGdvVG9TbGlkZShjdXJyZW50SW5kZXgpOwogIH0KfQoKdmlld3BvcnQuYWRkRXZlbnRMaXN0ZW5lcigndG91Y2hzdGFydCcsIGUgPT4gZHJhZ1N0YXJ0KGUudG91Y2hlc1swXS5jbGllbnRYKSwge3Bhc3NpdmU6dHJ1ZX0pOwp2aWV3cG9ydC5hZGRFdmVudExpc3RlbmVyKCd0b3VjaG1vdmUnLCBlID0+IGRyYWdNb3ZlKGUudG91Y2hlc1swXS5jbGllbnRYKSwge3Bhc3NpdmU6dHJ1ZX0pOwp2aWV3cG9ydC5hZGRFdmVudExpc3RlbmVyKCd0b3VjaGVuZCcsIGRyYWdFbmQpOwoKdmlld3BvcnQuYWRkRXZlbnRMaXN0ZW5lcignbW91c2Vkb3duJywgZSA9PiB7IGRyYWdTdGFydChlLmNsaWVudFgpOyBlLnByZXZlbnREZWZhdWx0KCk7IH0pOwp3aW5kb3cuYWRkRXZlbnRMaXN0ZW5lcignbW91c2Vtb3ZlJywgZSA9PiB7IGlmKGRyYWdnaW5nKSBkcmFnTW92ZShlLmNsaWVudFgpOyB9KTsKd2luZG93LmFkZEV2ZW50TGlzdGVuZXIoJ21vdXNldXAnLCBkcmFnRW5kKTsKCnJlbmRlck1lbnUoKTsKPC9zY3JpcHQ+Cgo8L2JvZHk+CjwvaHRtbD4K";
-
-function b64DecodeUtf8(b64){
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for(let i = 0; i < binary.length; i++){
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new TextDecoder('utf-8').decode(bytes);
-}
-
-function buildExportedHTML(categories){
-  const header = b64DecodeUtf8(EXPORT_HEADER_B64);
-  const footer = b64DecodeUtf8(EXPORT_FOOTER_B64);
-  const dataBlock = 'const CATEGORIES = ' + JSON.stringify(categories, null, 2) + ';\n';
-  return header + dataBlock + footer;
+   File export dibuat dari index.html yang sedang tayang, lalu data tutorial ditanam
+   langsung di dalamnya (window.IKISI_STATIC_DATA). Hasilnya: tampilan export selalu
+   sama dengan versi online terbaru, bisa dibuka offline, tanpa Firebase & tanpa
+   tombol "Usulkan Tutorial" / "Bagikan". */
+async function buildExportedHTML(categories){
+  const res = await fetch('index.html', { cache: 'no-store' });
+  if(!res.ok) throw new Error('Tidak bisa mengambil index.html');
+  const template = await res.text();
+  const json = JSON.stringify(categories)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+  const dataScript = `<script>window.IKISI_STATIC_DATA = ${json};<\/script>\n`;
+  const marker = '<script type="module">';
+  const idx = template.indexOf(marker);
+  if(idx === -1) throw new Error('Format index.html tidak dikenali');
+  return template.slice(0, idx) + dataScript + template.slice(idx);
 }
 
 const loginBox = document.getElementById('login-box');
@@ -366,18 +419,26 @@ function renderPendingCard(id, data){
   const card = document.createElement('div');
   card.className = 'pending-card';
 
-  const meta = data.submitterName
+  const who = data.submitterName
     ? `Diusulkan oleh ${escapeHtml(data.submitterName)}`
     : 'Diusulkan tanpa nama';
+  const created = data.createdAt && data.createdAt.toDate ? data.createdAt.toDate() : null;
+  const dateStr = created ? ' · ' + created.toLocaleDateString('id-ID', { day:'numeric', month:'short', year:'numeric' }) : '';
+  const meta = who + dateStr;
 
   const stepsHtml = (data.steps || []).map((s, i) => {
     const isSimple = typeof s === 'string';
     const title = isSimple ? '' : (s.title || '');
     const body = isSimple ? s : (s.text !== undefined ? s.text : (s.desc || ''));
     const image = isSimple ? '' : (s.image || '');
-    const imgHtml = image
-      ? `<img src="${escapeHtml(image)}" alt="Langkah ${i + 1}" class="pending-step-img" data-full="${escapeHtml(image)}" onerror="this.style.display='none'">`
-      : '';
+    const imageRef = isSimple ? '' : (s.imageRef || '');
+    let imgHtml = '';
+    if(imageRef){
+      // screenshot tersimpan tertutup di Firestore, dimuat setelah kartu tampil
+      imgHtml = `<img alt="Langkah ${i + 1}" class="pending-step-img" data-image-ref="${escapeHtml(imageRef)}">`;
+    }else if(image){
+      imgHtml = `<img src="${escapeHtml(image)}" alt="Langkah ${i + 1}" class="pending-step-img" data-full="${escapeHtml(image)}" onerror="this.style.display='none'">`;
+    }
     const titleHtml = title ? `<b class="pending-step-title">${escapeHtml(title)}</b>` : '';
     return `<li>${imgHtml}<div><b>${i + 1}.</b>${titleHtml}${escapeHtml(body)}</div></li>`;
   }).join('');
@@ -393,26 +454,55 @@ function renderPendingCard(id, data){
     </div>
   `;
 
+  card.querySelectorAll('img[data-image-ref]').forEach(async (img) => {
+    try{
+      const snap = await getDoc(doc(db, 'pending_images', img.dataset.imageRef));
+      if(!snap.exists()){ img.replaceWith(Object.assign(document.createElement('span'), { className:'pending-img-missing', textContent:'Gambar hilang' })); return; }
+      const { data: b64, mime } = snap.data();
+      const url = `data:${mime || 'image/webp'};base64,${b64}`;
+      img.src = url;
+      img.dataset.full = url;
+    }catch(err){
+      console.error(err);
+      img.style.display = 'none';
+    }
+  });
+
   const approveBtn = card.querySelector('.btn-approve');
   const rejectBtn = card.querySelector('.btn-reject');
 
   approveBtn.onclick = async () => {
+    const hasImages = (data.steps || []).some(s => s && (s.imageRef || (s.image && !isGithubImage(s.image))));
+    if(hasImages && !hasToken()){
+      alert('Usulan ini punya screenshot. Isi dulu token GitHub di bagian "Penyimpanan Gambar" di atas, supaya gambarnya bisa disimpan.');
+      document.getElementById('storage-box').scrollIntoView({ behavior:'smooth' });
+      return;
+    }
+    const ok = confirm(
+      'Sebelum menayangkan, pastikan:\n\n' +
+      '1. Semua screenshot sudah dicek (klik untuk perbesar) dan TIDAK menampilkan data pribadi: nama, nomor rekening, SID, saldo, portofolio, nomor HP, email.\n' +
+      '2. Isi tutorial benar, sesuai aplikasi iKISI versi terbaru.\n' +
+      '3. Tidak ada kalimat yang mengarah ke rekomendasi/ajakan membeli atau menjual produk tertentu.\n\n' +
+      'Setujui dan tayangkan sekarang?'
+    );
+    if(!ok) return;
     approveBtn.disabled = true; rejectBtn.disabled = true;
     approveBtn.textContent = 'Menyimpan...';
     try{
-      await approveSubmission(id, data);
+      await approveSubmission(id, data, (msg) => { approveBtn.textContent = msg; });
     }catch(err){
       console.error(err);
-      alert('Gagal menyetujui usulan ini. Coba lagi.');
+      alert('Gagal menyetujui usulan ini: ' + (err.message || 'coba lagi.'));
       approveBtn.disabled = false; rejectBtn.disabled = false;
       approveBtn.textContent = '✓ Setujui & Tayangkan';
     }
   };
 
   rejectBtn.onclick = async () => {
-    if(!confirm('Tolak dan hapus usulan ini?')) return;
+    if(!confirm('Tolak dan hapus usulan ini? Screenshot di dalamnya juga ikut dihapus.')) return;
     approveBtn.disabled = true; rejectBtn.disabled = true;
     try{
+      await deletePendingImages(data);
       await deleteDoc(doc(db, 'pending_topics', id));
     }catch(err){
       console.error(err);
@@ -424,17 +514,64 @@ function renderPendingCard(id, data){
   return card;
 }
 
-async function approveSubmission(pendingId, data){
+async function deletePendingImages(data){
+  const refs = (data.steps || []).map(s => s && s.imageRef).filter(Boolean);
+  await Promise.all(refs.map(r => deleteDoc(doc(db, 'pending_images', r)).catch(() => {})));
+}
+
+/** Ambil gambar dari URL lama (mis. ImgBB) sebagai Blob. Bisa gagal kalau server gambar memblokir. */
+async function fetchImageBlob(url){
+  const res = await fetch(url, { mode: 'cors' });
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const blob = await res.blob();
+  if(!blob.type.startsWith('image/')) throw new Error('bukan gambar');
+  return blob;
+}
+
+async function approveSubmission(pendingId, data, onProgress = () => {}){
   const catRef = doc(db, 'categories', data.categoryId);
   const catSnap = await getDoc(catRef);
   if(!catSnap.exists()){
     throw new Error('Kategori tujuan sudah tidak ada.');
   }
+
+  // Kumpulkan semua screenshot, lalu simpan ke GitHub dalam 1 commit
+  const steps = (data.steps || []).map(s => typeof s === 'string' ? { image: '', text: s } : { ...s });
+  const files = [];
+  const targets = [];
+  for(let i = 0; i < steps.length; i++){
+    const s = steps[i];
+    if(s.imageRef){
+      onProgress(`Menyiapkan gambar ${files.length + 1}...`);
+      const snap = await getDoc(doc(db, 'pending_images', s.imageRef));
+      if(!snap.exists()) throw new Error(`screenshot langkah ${i + 1} tidak ditemukan.`);
+      const { data: b64, mime } = snap.data();
+      files.push({ base64: b64, ext: extForMime(mime) });
+      targets.push(i);
+    }else if(s.image && !isGithubImage(s.image)){
+      // usulan lama yang gambarnya masih di ImgBB
+      try{
+        const blob = await fetchImageBlob(s.image);
+        files.push({ base64: await blobToBase64(blob), ext: extForMime(blob.type) });
+        targets.push(i);
+      }catch(err){
+        console.warn('Gambar lama tidak bisa dipindah, tetap pakai link lama:', s.image, err);
+        if(s.tempImage) throw new Error(`screenshot langkah ${i + 1} (usulan lama) sudah tidak bisa diambil. Minta pengusul mengirim ulang.`);
+      }
+    }
+  }
+
+  if(files.length){
+    onProgress(`Menyimpan ${files.length} gambar ke GitHub...`);
+    const urls = await commitImages(files, `Gambar tutorial: ${String(data.topicTitle || '').slice(0, 60)}`);
+    targets.forEach((stepIdx, k) => { steps[stepIdx].image = urls[k]; });
+  }
+
+  onProgress('Menayangkan...');
   const newTopic = {
     id: uid('topic'),
     title: data.topicTitle,
-    slides: (data.steps || []).map(s => {
-      if(typeof s === 'string') return { image: '', text: s };
+    slides: steps.map(s => {
       const title = (s.title || '').trim();
       if(title){
         return { image: s.image || '', title, desc: s.desc !== undefined ? s.desc : (s.text || '') };
@@ -445,6 +582,7 @@ async function approveSubmission(pendingId, data){
   await updateDoc(catRef, {
     items: arrayUnion(newTopic)
   });
+  await deletePendingImages(data);
   await deleteDoc(doc(db, 'pending_topics', pendingId));
 }
 
@@ -473,18 +611,12 @@ imgModal.addEventListener('click', () => {
 });
 
 /* ---------- kelola kategori & topik yang sudah tayang ---------- */
-async function uploadToImgbb(file){
-  const formData = new FormData();
-  formData.append('image', file);
-  const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-    method: 'POST',
-    body: formData
-  });
-  const data = await res.json();
-  if(!data.success){
-    throw new Error(data.error?.message || 'Upload gagal');
-  }
-  return data.data.url;
+// Gambar yang diupload admin: dikecilkan (maks 1080px, WebP) lalu disimpan ke repo GitHub
+async function uploadImageToGithub(file){
+  if(!hasToken()) throw new Error('Isi token GitHub dulu di bagian Penyimpanan Gambar.');
+  const blob = await compressImage(file);
+  const [url] = await commitImages([{ base64: await blobToBase64(blob), ext: extForMime(blob.type) }], 'Gambar tutorial (edit admin)');
+  return { url, previewUrl: URL.createObjectURL(blob) };
 }
 
 let latestCategoryDocs = [];
@@ -493,6 +625,7 @@ function listenCategories(){
   const q = query(collection(db, 'categories'), orderBy('order'));
   unsubscribeCategories = onSnapshot(q, (snap) => {
     latestCategoryDocs = snap.docs;
+    refreshMigrateUi();
     manageListEl.innerHTML = '';
     if(snap.empty){
       manageListEl.innerHTML = '<p class="empty-note">Belum ada kategori tersedia.</p>';
@@ -776,20 +909,20 @@ function renderManageCategory(catId, cat, index, allDocs){
       if(!file) return;
       const li = input.closest('.slide-detail-row');
       const statusEl = li.querySelector('.slide-edit-image-status');
-      statusEl.textContent = 'Mengupload gambar...';
+      statusEl.textContent = 'Menyimpan gambar ke GitHub...';
       try{
-        const url = await uploadToImgbb(file);
+        const { url, previewUrl } = await uploadImageToGithub(file);
         li.dataset.newImage = url;
         const previewBox = li.querySelector('.slide-edit-image-preview');
         const previewImg = previewBox.querySelector('img');
-        previewImg.src = url;
-        previewImg.dataset.full = url;
+        previewImg.src = previewUrl;
+        previewImg.dataset.full = previewUrl;
         previewBox.style.display = 'flex';
         input.style.display = 'none';
-        statusEl.textContent = 'Gambar berhasil diupload.';
+        statusEl.textContent = 'Gambar tersimpan. Klik Simpan. Gambar tampil di situs ±1 menit lagi.';
       }catch(err){
         console.error(err);
-        statusEl.textContent = 'Gagal upload gambar, coba lagi.';
+        statusEl.textContent = err.message || 'Gagal menyimpan gambar, coba lagi.';
         input.value = '';
       }
     };
@@ -844,6 +977,132 @@ function renderManageCategory(catId, cat, index, allDocs){
 
   return box;
 }
+
+/* ========================= Pengaturan token GitHub ========================= */
+document.getElementById('repo-name').textContent = `${GITHUB.owner}/${GITHUB.repo}`;
+const tokenStatus = document.getElementById('token-status');
+function refreshTokenUi(state){
+  const set = hasToken();
+  document.getElementById('token-form').style.display = set ? 'none' : 'block';
+  document.getElementById('token-set').style.display = set ? 'block' : 'none';
+  const badge = document.getElementById('storage-badge');
+  badge.className = 'storage-badge' + (set && state !== 'error' ? ' ok' : '');
+  badge.textContent = !set ? 'Belum diatur' : (state === 'error' ? 'Bermasalah' : 'Siap');
+}
+async function runTokenTest(){
+  tokenStatus.className = 'import-status';
+  tokenStatus.textContent = 'Mengetes koneksi ke GitHub...';
+  try{
+    tokenStatus.textContent = await testConnection();
+    tokenStatus.className = 'import-status success';
+    refreshTokenUi('ok');
+  }catch(err){
+    tokenStatus.className = 'import-status error';
+    tokenStatus.textContent = err.message;
+    refreshTokenUi('error');
+  }
+}
+document.getElementById('btn-save-token').onclick = async () => {
+  const v = document.getElementById('gh-token').value.trim();
+  if(!v){ tokenStatus.className = 'import-status error'; tokenStatus.textContent = 'Token belum diisi.'; return; }
+  setToken(v);
+  document.getElementById('gh-token').value = '';
+  refreshTokenUi();
+  await runTokenTest();
+};
+document.getElementById('btn-test-token').onclick = runTokenTest;
+document.getElementById('btn-clear-token').onclick = () => {
+  if(!confirm('Hapus token dari browser ini? Kamu perlu memasukkan token lagi untuk menyetujui usulan bergambar.')) return;
+  clearToken();
+  tokenStatus.className = 'import-status';
+  tokenStatus.textContent = 'Token dihapus dari browser ini.';
+  refreshTokenUi();
+};
+refreshTokenUi();
+
+/* ========================= Pindahkan gambar lama (ImgBB) ke GitHub ========================= */
+const migrateBtn = document.getElementById('btn-migrate');
+const migrateDesc = document.getElementById('migrate-desc');
+const migrateStatus = document.getElementById('migrate-status');
+
+function collectOldImages(){
+  const set = new Set();
+  latestCategoryDocs.forEach(d => (d.data().items || []).forEach(t => (t.slides || []).forEach(s => {
+    if(s.image && !isGithubImage(s.image)) set.add(s.image);
+  })));
+  return [...set];
+}
+function refreshMigrateUi(){
+  const n = collectOldImages().length;
+  migrateBtn.disabled = n === 0;
+  migrateDesc.textContent = n === 0
+    ? 'Semua gambar yang tayang sudah tersimpan di GitHub.'
+    : `${n} gambar yang tayang masih di layanan lama (ImgBB).`;
+}
+
+migrateBtn.onclick = async () => {
+  if(!hasToken()){ alert('Isi token GitHub dulu di bagian Penyimpanan Gambar.'); return; }
+  const urls = collectOldImages();
+  if(!urls.length) return;
+  if(!confirm(`Pindahkan ${urls.length} gambar ke GitHub? Tutorial tetap tayang selama proses berjalan.`)) return;
+  migrateBtn.disabled = true;
+  migrateStatus.className = 'import-status';
+  const failed = [];
+  const mapping = {};
+  try{
+    // ambil & kecilkan gambar satu per satu, commit per 20 gambar
+    let batch = [], batchUrls = [];
+    const flush = async () => {
+      if(!batch.length) return;
+      const newUrls = await commitImages(batch, `Pindah ${batch.length} gambar tutorial dari ImgBB`);
+      batchUrls.forEach((old, k) => { mapping[old] = newUrls[k]; });
+      batch = []; batchUrls = [];
+    };
+    for(let i = 0; i < urls.length; i++){
+      migrateStatus.textContent = `Mengambil gambar ${i + 1} dari ${urls.length}...`;
+      try{
+        const raw = await fetchImageBlob(urls[i]);
+        const blob = await compressImage(new File([raw], 'img', { type: raw.type }));
+        batch.push({ base64: await blobToBase64(blob), ext: extForMime(blob.type) });
+        batchUrls.push(urls[i]);
+      }catch(err){
+        console.warn('Gagal mengambil', urls[i], err);
+        failed.push(urls[i]);
+      }
+      if(batch.length >= 20){ migrateStatus.textContent = 'Menyimpan ke GitHub...'; await flush(); }
+    }
+    migrateStatus.textContent = 'Menyimpan ke GitHub...';
+    await flush();
+
+    // ganti link di semua kategori
+    migrateStatus.textContent = 'Memperbarui link di tutorial...';
+    const snap = await getDocs(query(collection(db, 'categories'), orderBy('order')));
+    for(const d of snap.docs){
+      const items = d.data().items || [];
+      let changed = false;
+      const newItems = items.map(t => ({
+        ...t,
+        slides: (t.slides || []).map(s => {
+          if(s.image && mapping[s.image]){ changed = true; return { ...s, image: mapping[s.image] }; }
+          return s;
+        })
+      }));
+      if(changed) await updateDoc(doc(db, 'categories', d.id), { items: newItems });
+    }
+    const moved = Object.keys(mapping).length;
+    migrateStatus.className = failed.length ? 'import-status error' : 'import-status success';
+    migrateStatus.innerHTML = `${moved} gambar berhasil dipindah. Gambar baru tampil di situs ±1–2 menit lagi.` +
+      (failed.length
+        ? `<br>${failed.length} gambar tidak bisa diambil otomatis (diblokir server lama). Gambar ini tetap tayang dari link lama; untuk memindahkannya, buka topiknya → Lihat → Edit → pilih ulang gambarnya.`
+        : '');
+  }catch(err){
+    console.error(err);
+    migrateStatus.className = 'import-status error';
+    migrateStatus.textContent = 'Proses terhenti: ' + err.message + ' Tutorial tidak berubah dan tetap tayang normal. Periksa token, lalu klik Pindahkan lagi.';
+  }finally{
+    refreshMigrateUi();
+  }
+};
 
 const importBtn = document.getElementById('btn-import');
 const importStatus = document.getElementById('import-status');
@@ -917,7 +1176,7 @@ exportBtn.onclick = async () => {
         items: data.items || []
       };
     });
-    const html = buildExportedHTML(categories);
+    const html = await buildExportedHTML(categories);
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
