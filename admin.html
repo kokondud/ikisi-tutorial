@@ -240,7 +240,7 @@
   <div class="topbar">
     <div>
       <h1>Review Usulan Tutorial</h1>
-      <p class="sub">Usulan yang di-approve akan langsung tayang di halaman utama.</p>
+      <p class="sub">Usulan yang di-approve akan langsung tayang di halaman utama. <a href="submit.html" style="color:var(--kisi-green); font-weight:700;">Buka form usulan tim</a></p>
     </div>
     <button class="btn-logout" id="btn-logout">Keluar</button>
   </div>
@@ -419,9 +419,9 @@ function renderPendingCard(id, data){
   const card = document.createElement('div');
   card.className = 'pending-card';
 
-  const who = data.submitterName
+  const who = (data.submitterName
     ? `Diusulkan oleh ${escapeHtml(data.submitterName)}`
-    : 'Diusulkan tanpa nama';
+    : 'Diusulkan tanpa nama') + (data.submitterEmail ? ` (${escapeHtml(data.submitterEmail)})` : '');
   const created = data.createdAt && data.createdAt.toDate ? data.createdAt.toDate() : null;
   const dateStr = created ? ' · ' + created.toLocaleDateString('id-ID', { day:'numeric', month:'short', year:'numeric' }) : '';
   const meta = who + dateStr;

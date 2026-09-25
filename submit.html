@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Usulkan Tutorial Baru — iKISI</title>
+<title>Usulkan Tutorial — Tim KISI</title>
 <meta name="robots" content="noindex">
 <style>
   :root{
@@ -109,14 +109,41 @@
   .img-modal.open{ display:flex; }
   .img-modal img{ max-width:100%; max-height:100%; border-radius:8px; }
 
+  .login-card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px 16px; margin-top:6px; }
+  .login-card h2{ font-size:16px; margin:0 0 4px 0; }
+  .login-card input{ width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:10px; font-size:14px; margin-top:10px; }
+  .login-card .btn-submit{ margin-top:14px; }
+  .login-error{ color:var(--danger); font-size:12.5px; margin-top:10px; line-height:1.5; }
+  .login-error.ok{ color:var(--kisi-green); }
+  .link-btn{ border:none; background:none; color:var(--kisi-green); font-weight:700; font-size:12.5px; padding:0; margin-top:12px; cursor:pointer; text-decoration:underline; }
+  .user-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:9px 12px; font-size:12.5px; color:var(--sub); margin-bottom:16px; }
+  .user-bar b{ color:var(--ink); word-break:break-all; }
   .footnote{ font-size:11px; color:var(--sub); line-height:1.6; margin-top:26px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <a class="back-link" href="index.html">‹ Kembali ke Tutorial</a>
-  <h1>Usulkan Tutorial Baru</h1>
-  <p class="sub">Punya cara pakai iKISI yang belum ada panduannya? Tulis langkahnya di sini. Tim KISI akan mereview dulu sebelum tutorial tayang untuk semua orang.</p>
+  <a class="back-link" href="index.html">‹ Lihat Pusat Tutorial</a>
+  <h1>Usulkan Tutorial</h1>
+  <p class="sub">Khusus tim KISI. Tulis langkah-langkah tutorial iKISI di sini. Admin akan mereview dulu sebelum tutorial tayang untuk nasabah.</p>
+
+  <div class="login-card" id="login-area" style="display:none;">
+    <h2>Masuk dengan akun tim</h2>
+    <p class="hint">Belum punya akun? Minta ke admin Pusat Tutorial.</p>
+    <form id="login-form">
+      <input type="email" id="login-email" placeholder="Email" autocomplete="username" required>
+      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required>
+      <button type="submit" class="btn-submit" id="btn-login">Masuk</button>
+    </form>
+    <button type="button" class="link-btn" id="btn-forgot">Lupa password?</button>
+    <div class="login-error" id="login-error" role="alert"></div>
+  </div>
+
+  <div id="form-area" style="display:none;">
+  <div class="user-bar">
+    <span>Masuk sebagai <b id="user-email"></b></span>
+    <button type="button" class="mini-btn" id="btn-logout">Keluar</button>
+  </div>
 
   <div class="privacy-box">
     <strong>Sebelum melampirkan screenshot:</strong> tutup atau blur semua data pribadi, seperti nama, nomor rekening, SID/nomor nasabah, saldo, isi portofolio, nomor HP, dan email. Usulan yang memuat data pribadi akan ditolak.
@@ -131,8 +158,8 @@
     <label for="topic-title">Judul tutorial</label>
     <input type="text" id="topic-title" maxlength="100" placeholder="Contoh: Cara top up RDN" required>
 
-    <label for="submitter-name">Nama kamu <span class="opt">(opsional)</span></label>
-    <input type="text" id="submitter-name" maxlength="60" placeholder="Boleh dikosongkan">
+    <label for="submitter-name">Nama kamu</label>
+    <input type="text" id="submitter-name" maxlength="60" placeholder="Supaya admin tahu siapa yang mengusulkan">
 
     <!-- Jebakan bot spam: disembunyikan dari manusia, diisi otomatis oleh bot -->
     <div class="hp-field" aria-hidden="true">
@@ -154,7 +181,9 @@
     <div class="status-msg" id="status-msg" role="status" aria-live="polite"></div>
   </form>
 
-  <p class="footnote">Screenshot otomatis dikecilkan sebelum dikirim, jadi ukuran file asli tidak masalah. Format yang didukung: JPG, PNG, WebP. Screenshot hanya bisa dilihat tim KISI selama direview, dan dihapus kalau usulan tidak disetujui.</p>
+  </div>
+
+  <p class="footnote">Screenshot otomatis dikecilkan sebelum dikirim, jadi ukuran file asli tidak masalah. Format yang didukung: JPG, PNG, WebP. Screenshot hanya bisa dilihat admin selama direview, dan dihapus kalau usulan tidak disetujui.</p>
 </div>
 
 <div id="img-modal" class="img-modal" role="dialog" aria-label="Preview gambar diperbesar">
@@ -164,13 +193,65 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getFirestore, collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { compressImage, blobToBase64 } from "./image-utils.js";
 
 const MAX_STEPS = 15;
 const MAX_STEP_CHARS = 600;
 
-const db = getFirestore(initializeApp(firebaseConfig));
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+/* ---------- login tim KISI ---------- */
+let currentUser = null;
+const loginArea = document.getElementById('login-area');
+const formArea = document.getElementById('form-area');
+const loginError = document.getElementById('login-error');
+const NAME_KEY = 'ikisi_submitter_name';
+
+onAuthStateChanged(auth, (user) => {
+  currentUser = user;
+  loginArea.style.display = user ? 'none' : 'block';
+  formArea.style.display = user ? 'block' : 'none';
+  if(user){
+    document.getElementById('user-email').textContent = user.email || '';
+    const nameInput = document.getElementById('submitter-name');
+    if(!nameInput.value){ try{ nameInput.value = localStorage.getItem(NAME_KEY) || ''; }catch(_){} }
+  }
+});
+
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  loginError.className = 'login-error';
+  loginError.textContent = '';
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true; btn.textContent = 'Masuk...';
+  try{
+    await signInWithEmailAndPassword(auth,
+      document.getElementById('login-email').value.trim(),
+      document.getElementById('login-password').value);
+  }catch(err){
+    console.error(err);
+    loginError.textContent = err.code === 'auth/too-many-requests'
+      ? 'Terlalu banyak percobaan. Tunggu beberapa menit lalu coba lagi.'
+      : 'Email atau password salah.';
+  }finally{
+    btn.disabled = false; btn.textContent = 'Masuk';
+  }
+});
+
+document.getElementById('btn-forgot').addEventListener('click', async () => {
+  const email = document.getElementById('login-email').value.trim();
+  if(!email){ loginError.className = 'login-error'; loginError.textContent = 'Isi email kamu dulu, lalu klik Lupa password lagi.'; return; }
+  try{ await sendPasswordResetEmail(auth, email); }catch(err){ console.error(err); }
+  // pesan sama untuk semua kasus, supaya tidak membocorkan email mana yang terdaftar
+  loginError.className = 'login-error ok';
+  loginError.textContent = 'Kalau email ini terdaftar, link untuk mengatur ulang password sudah dikirim. Cek juga folder spam.';
+});
+
+document.getElementById('btn-logout').addEventListener('click', () => signOut(auth));
 
 const $ = (id) => document.getElementById(id);
 const catSelect = $('cat-select');
@@ -376,6 +457,8 @@ form.addEventListener('submit', async (e) => {
   const withImageButNoText = cards.filter(c => c._blob && !c.querySelector('.step-body').value.trim());
 
   if(!category){ setStatus('error', 'Pilih kategori tujuan dulu.'); catSelect.focus(); return; }
+  if(!currentUser){ setStatus('error', 'Sesi login habis. Muat ulang halaman lalu masuk lagi.'); return; }
+  if(!submitterName){ setStatus('error', 'Isi nama kamu dulu.'); $('submitter-name').focus(); return; }
   if(topicTitle.length < 3){ setStatus('error', 'Judul tutorial belum diisi.'); $('topic-title').focus(); return; }
   if(withImageButNoText.length){
     setStatus('error', 'Ada langkah yang punya screenshot tapi belum ada penjelasannya. Isi penjelasannya dulu.');
@@ -419,12 +502,16 @@ form.addEventListener('submit', async (e) => {
       categoryTitle: category.title,
       topicTitle,
       steps,
-      submitterName: submitterName || null,
+      submitterName,
+      submitterUid: currentUser.uid,
+      submitterEmail: currentUser.email || null,
       status: 'pending',
       createdAt: serverTimestamp()
     });
+    try{ localStorage.setItem(NAME_KEY, submitterName); }catch(_){}
     resetForm();
-    setStatus('success', 'Terima kasih! Usulan kamu sudah terkirim dan akan direview tim KISI sebelum tayang.');
+    $('submitter-name').value = submitterName;
+    setStatus('success', 'Terima kasih! Usulan sudah terkirim dan akan direview admin sebelum tayang.');
   }catch(err){
     console.error(err);
     setStatus('error', 'Usulan belum terkirim. Periksa koneksi internet lalu tekan Kirim Usulan lagi. Isian kamu tidak hilang.');

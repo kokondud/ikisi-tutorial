@@ -25,6 +25,17 @@ service cloud.firestore {
         && request.auth.uid in ['GANTI_DENGAN_UID_ADMIN'];
     }
 
+    // Anggota tim KISI = siapa pun yang punya akun login di Firebase Authentication.
+    // PENTING: matikan pendaftaran mandiri (lihat README) supaya akun hanya bisa
+    // dibuat oleh admin lewat Firebase Console.
+    function isTeam() {
+      return request.auth != null;
+      // ALTERNATIF kalau opsi mematikan pendaftaran tidak tersedia di Console:
+      // hapus baris "return" di atas, lalu aktifkan baris di bawah ini dan
+      // isi dengan UID semua anggota tim (termasuk admin).
+      // return request.auth != null && request.auth.uid in ['UID_TIM_1', 'UID_TIM_2'];
+    }
+
     function isShortString(v, minLen, maxLen) {
       return v is string && v.size() >= minLen && v.size() <= maxLen;
     }
@@ -35,13 +46,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Usulan dari form publik: siapa pun boleh MENGIRIM (dengan format yang
-    // benar), tapi hanya admin yang boleh melihat, mengubah, atau menghapus.
+    // Usulan tutorial: hanya tim KISI yang sudah login yang boleh MENGIRIM
+    // (dengan format yang benar). Hanya admin yang boleh melihat, mengubah,
+    // atau menghapus.
     match /pending_topics/{id} {
       allow read, update, delete: if isAdmin();
-      allow create: if
-        request.resource.data.keys().hasOnly(
-          ['categoryId', 'categoryTitle', 'topicTitle', 'steps', 'submitterName', 'status', 'createdAt'])
+      allow create: if isTeam()
+        && request.resource.data.keys().hasOnly(
+          ['categoryId', 'categoryTitle', 'topicTitle', 'steps', 'submitterName',
+           'submitterUid', 'submitterEmail', 'status', 'createdAt'])
+        && request.resource.data.submitterUid == request.auth.uid
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time
         && isShortString(request.resource.data.categoryId, 1, 100)
@@ -51,16 +65,15 @@ service cloud.firestore {
         && request.resource.data.steps is list
         && request.resource.data.steps.size() >= 1
         && request.resource.data.steps.size() <= 15
-        && (request.resource.data.submitterName == null
-            || isShortString(request.resource.data.submitterName, 1, 60));
+        && isShortString(request.resource.data.submitterName, 1, 60);
     }
 
     // Screenshot usulan yang menunggu review. Disimpan tertutup (hanya admin
     // yang bisa melihat), baru dipindah ke GitHub kalau usulan disetujui.
     match /pending_images/{id} {
       allow read, delete: if isAdmin();
-      allow create: if
-        request.resource.data.keys().hasOnly(['data', 'mime', 'createdAt'])
+      allow create: if isTeam()
+        && request.resource.data.keys().hasOnly(['data', 'mime', 'createdAt'])
         && request.resource.data.mime in ['image/webp', 'image/jpeg']
         && request.resource.data.data is string
         && request.resource.data.data.size() <= 900000

@@ -7,7 +7,7 @@ Halaman tutorial aplikasi iKISI. Data tutorial disimpan di Firebase Firestore, g
 | File | Fungsi |
 |---|---|
 | `index.html` | Halaman tutorial untuk nasabah |
-| `submit.html` | Form usulan tutorial baru (publik) |
+| `submit.html` | Form usulan tutorial (khusus tim KISI, perlu login) |
 | `admin.html` | Review usulan & kelola tutorial (perlu login) |
 | `image-utils.js` | Mengecilkan gambar sebelum dikirim |
 | `github-store.js` | Menyimpan gambar ke repo (dipakai admin) |
@@ -29,6 +29,15 @@ Halaman tutorial aplikasi iKISI. Data tutorial disimpan di Firebase Firestore, g
    - Tempel token di `admin.html`, bagian **Penyimpanan Gambar**, klik **Simpan & Tes**.
 4. **Pindahkan gambar lama:** di admin, klik **Pindahkan** pada kotak "Pindahkan gambar lama ke GitHub".
 5. **Tes:** kirim satu usulan bergambar lewat `submit.html`, setujui di admin, tunggu ±1 menit, cek di `index.html`.
+
+## Akun tim KISI (untuk mengirim usulan)
+
+Form usulan (`submit.html`) hanya bisa dipakai tim KISI yang punya akun. Halaman tutorial untuk nasabah tidak lagi punya tombol usulan. Bagikan link `https://kokondud.github.io/ikisi-tutorial/submit.html` hanya ke tim internal.
+
+- **Menambah anggota tim:** Firebase Console → Authentication → Users → **Add user** → isi email kantor dan password awal. Kirim password lewat jalur pribadi. Anggota bisa mengganti password lewat tombol "Lupa password?" di form.
+- **Anggota keluar:** hapus akunnya di Authentication → Users.
+- **Wajib: matikan pendaftaran mandiri** supaya orang luar tidak bisa membuat akun sendiri: Authentication → Settings → **User actions** → hilangkan centang **Enable create (sign-up)** → Save. Kalau opsi ini tidak ada di project kamu, pakai versi daftar UID yang sudah disiapkan (dalam komentar) di fungsi `isTeam()` di `firestore.rules`.
+- Anggota tim **bukan** admin. Mereka hanya bisa mengirim usulan, tidak bisa menyetujui atau mengubah tutorial. Admin tetap ditentukan oleh daftar UID di `isAdmin()`.
 
 ## Alur gambar
 
