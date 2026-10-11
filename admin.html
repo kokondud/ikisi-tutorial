@@ -218,12 +218,7 @@
 <body>
 
 <div id="login-box">
-  <h1>Login Admin</h1>
-  <p class="sub">Masuk untuk mereview usulan tutorial yang masuk.</p>
-  <input type="email" id="login-email" placeholder="Email">
-  <input type="password" id="login-password" placeholder="Password">
-  <button id="btn-login">Masuk</button>
-  <div id="login-error"></div>
+  <p class="sub">Menghubungkan ke Tool Hub…</p>
 </div>
 
 <div class="wrap" id="admin-panel" style="display:none;">
@@ -232,7 +227,6 @@
       <h1>Review Usulan Tutorial</h1>
       <p class="sub">Usulan yang di-approve akan langsung tayang di halaman utama. <a href="submit.html" style="color:var(--kisi-green); font-weight:700;">Buka form usulan tim</a></p>
     </div>
-    <button class="btn-logout" id="btn-logout">Keluar</button>
   </div>
   <div class="storage-box" id="storage-box">
     <div class="storage-head">
@@ -309,13 +303,14 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import {
-  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+  getAuth, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import {
   getFirestore, collection, query, orderBy, onSnapshot, getDocs, writeBatch,
   doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
+import { hubSignIn } from "./hub-auth.js";
 import { compressImage, blobToBase64, extForMime } from "./image-utils.js";
 import { commitImages, hasToken, setToken, clearToken, testConnection, isGithubImage } from "./github-store.js";
 import { GITHUB } from "./github-config.js";
@@ -346,22 +341,11 @@ async function buildExportedHTML(categories){
 
 const loginBox = document.getElementById('login-box');
 const adminPanel = document.getElementById('admin-panel');
-const loginError = document.getElementById('login-error');
 const pendingListEl = document.getElementById('pending-list');
 const manageListEl = document.getElementById('manage-list');
 
-document.getElementById('btn-login').onclick = async () => {
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  loginError.textContent = '';
-  try{
-    await signInWithEmailAndPassword(auth, email, password);
-  }catch(err){
-    loginError.textContent = 'Email atau password salah.';
-  }
-};
-
-document.getElementById('btn-logout').onclick = () => signOut(auth);
+// login diurus Tool Hub (lihat hub-auth.js); hanya yang diberi tingkat Admin di hub yang sampai ke halaman ini
+hubSignIn(auth, { box: loginBox, needAdmin: true });
 
 let unsubscribePending = null;
 let unsubscribeCategories = null;

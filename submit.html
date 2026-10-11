@@ -128,21 +128,12 @@
   <p class="sub">Khusus tim KISI. Tulis langkah-langkah tutorial iKISI di sini. Admin akan mereview dulu sebelum tutorial tayang untuk nasabah.</p>
 
   <div class="login-card" id="login-area" style="display:none;">
-    <h2>Masuk dengan akun tim</h2>
-    <p class="hint">Belum punya akun? Minta ke admin Pusat Tutorial.</p>
-    <form id="login-form">
-      <input type="email" id="login-email" placeholder="Email" autocomplete="username" required>
-      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required>
-      <button type="submit" class="btn-submit" id="btn-login">Masuk</button>
-    </form>
-    <button type="button" class="link-btn" id="btn-forgot">Lupa password?</button>
-    <div class="login-error" id="login-error" role="alert"></div>
+    <p class="hint" style="margin:0;">Menghubungkan ke Tool Hub…</p>
   </div>
 
   <div id="form-area" style="display:none;">
   <div class="user-bar">
     <span>Masuk sebagai <b id="user-email"></b></span>
-    <button type="button" class="mini-btn" id="btn-logout">Keluar</button>
   </div>
 
   <div class="privacy-box">
@@ -193,7 +184,8 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getFirestore, collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { hubSignIn, hubEmail } from "./hub-auth.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { compressImage, blobToBase64 } from "./image-utils.js";
 
@@ -208,7 +200,6 @@ const auth = getAuth(app);
 let currentUser = null;
 const loginArea = document.getElementById('login-area');
 const formArea = document.getElementById('form-area');
-const loginError = document.getElementById('login-error');
 const NAME_KEY = 'ikisi_submitter_name';
 
 onAuthStateChanged(auth, (user) => {
@@ -216,42 +207,14 @@ onAuthStateChanged(auth, (user) => {
   loginArea.style.display = user ? 'none' : 'block';
   formArea.style.display = user ? 'block' : 'none';
   if(user){
-    document.getElementById('user-email').textContent = user.email || '';
+    document.getElementById('user-email').textContent = user.email || hubEmail;
     const nameInput = document.getElementById('submitter-name');
     if(!nameInput.value){ try{ nameInput.value = localStorage.getItem(NAME_KEY) || ''; }catch(_){} }
   }
 });
 
-document.getElementById('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  loginError.className = 'login-error';
-  loginError.textContent = '';
-  const btn = document.getElementById('btn-login');
-  btn.disabled = true; btn.textContent = 'Masuk...';
-  try{
-    await signInWithEmailAndPassword(auth,
-      document.getElementById('login-email').value.trim(),
-      document.getElementById('login-password').value);
-  }catch(err){
-    console.error(err);
-    loginError.textContent = err.code === 'auth/too-many-requests'
-      ? 'Terlalu banyak percobaan. Tunggu beberapa menit lalu coba lagi.'
-      : 'Email atau password salah.';
-  }finally{
-    btn.disabled = false; btn.textContent = 'Masuk';
-  }
-});
-
-document.getElementById('btn-forgot').addEventListener('click', async () => {
-  const email = document.getElementById('login-email').value.trim();
-  if(!email){ loginError.className = 'login-error'; loginError.textContent = 'Isi email kamu dulu, lalu klik Lupa password lagi.'; return; }
-  try{ await sendPasswordResetEmail(auth, email); }catch(err){ console.error(err); }
-  // pesan sama untuk semua kasus, supaya tidak membocorkan email mana yang terdaftar
-  loginError.className = 'login-error ok';
-  loginError.textContent = 'Kalau email ini terdaftar, link untuk mengatur ulang password sudah dikirim. Cek juga folder spam.';
-});
-
-document.getElementById('btn-logout').addEventListener('click', () => signOut(auth));
+// login diurus Tool Hub (lihat hub-auth.js); hak kirim usulan diatur di halaman Admin hub
+hubSignIn(auth, { box: loginArea });
 
 const $ = (id) => document.getElementById(id);
 const catSelect = $('cat-select');
@@ -504,7 +467,7 @@ form.addEventListener('submit', async (e) => {
       steps,
       submitterName,
       submitterUid: currentUser.uid,
-      submitterEmail: currentUser.email || null,
+      submitterEmail: currentUser.email || hubEmail || null,
       status: 'pending',
       createdAt: serverTimestamp()
     });
