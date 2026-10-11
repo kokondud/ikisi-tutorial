@@ -135,6 +135,11 @@
   .manage-cat-head{ display:flex; align-items:center; justify-content:space-between; }
   .manage-cat-title{ font-size:14.5px; font-weight:800; display:flex; align-items:center; gap:8px; }
   .manage-cat-icon{ font-size:18px; }
+  .manage-cat-toggle{ background:none; border:0; padding:4px 0; margin:0; color:inherit; font-family:inherit; cursor:pointer; text-align:left; flex:1; min-width:0; }
+  .manage-cat-caret{ display:inline-block; width:14px; color:var(--sub); transition:transform .15s; }
+  .manage-cat-toggle[aria-expanded="true"] .manage-cat-caret{ transform:rotate(90deg); }
+  .manage-cat-count{ font-size:12px; font-weight:600; color:var(--sub); }
+  .manage-topic-list[hidden]{ display:none; }
   .btn-delete-cat{
     border:none; background:var(--danger-soft); color:var(--danger); font-size:11px;
     font-weight:700; padding:5px 10px; border-radius:8px; cursor:pointer;
@@ -638,6 +643,10 @@ function renderSlideDetailHtml(slide, i, topicId){
   `;
 }
 
+// Kategori yang sedang dibuka di bagian Kelola. Disimpan di sini karena daftar digambar ulang tiap ada perubahan data;
+// tanpa ini kategori yang sedang dikerjakan menutup sendiri setelah setiap simpan / pindah / hapus.
+const openCats = new Set();
+
 function renderManageCategory(catId, cat, index, allDocs){
   const box = document.createElement('div');
   box.className = 'manage-cat';
@@ -683,15 +692,23 @@ function renderManageCategory(catId, cat, index, allDocs){
 
   box.innerHTML = `
     <div class="manage-cat-head">
-      <div class="manage-cat-title"><span class="manage-cat-icon">${escapeHtml(cat.icon || '📁')}</span>${escapeHtml(cat.title || '(tanpa judul)')}</div>
+      <button type="button" class="manage-cat-title manage-cat-toggle" aria-expanded="${openCats.has(catId)}" title="Buka / tutup daftar topik"><span class="manage-cat-caret" aria-hidden="true">▸</span><span class="manage-cat-icon">${escapeHtml(cat.icon || '📁')}</span>${escapeHtml(cat.title || '(tanpa judul)')} <span class="manage-cat-count">${items.length} topik</span></button>
       <div style="display:flex; gap:6px;">
         <button class="btn-move-cat" data-dir="-1" ${index === 0 ? 'disabled' : ''}>↑</button>
         <button class="btn-move-cat" data-dir="1" ${index === allDocs.length - 1 ? 'disabled' : ''}>↓</button>
         <button class="btn-delete-cat">Hapus Kategori</button>
       </div>
     </div>
-    <ul class="manage-topic-list">${topicsHtml}</ul>
+    <ul class="manage-topic-list"${openCats.has(catId) ? '' : ' hidden'}>${topicsHtml}</ul>
   `;
+
+  const toggle = box.querySelector('.manage-cat-toggle');
+  toggle.onclick = () => {
+    const open = !openCats.has(catId);
+    if(open) openCats.add(catId); else openCats.delete(catId);
+    toggle.setAttribute('aria-expanded', open);
+    box.querySelector('.manage-topic-list').hidden = !open;
+  };
 
   box.querySelector('.btn-delete-cat').onclick = async () => {
     if(!confirm(`Hapus kategori "${cat.title}" beserta SEMUA topik di dalamnya? Tindakan ini tidak bisa dibatalkan.`)) return;
