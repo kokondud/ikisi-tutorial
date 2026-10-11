@@ -360,6 +360,12 @@
 </div>
 
 <script type="module">
+// Di dalam Tool Hub: beri tahu dashboard alamat halaman yang sedang dibuka, supaya tombol "Bagikan link" di sana menyalin link tutorial yang tepat.
+if (window.parent !== window) {
+  const tell = () => parent.postMessage({ hubShareUrl: location.href }, 'https://tool-hub.kho-xaverius.workers.dev');
+  ['pushState', 'replaceState'].forEach(k => { const o = history[k]; history[k] = function () { const r = o.apply(this, arguments); tell(); return r; }; });
+  addEventListener('hashchange', tell); addEventListener('popstate', tell); tell();
+}
 /* =============================================================================
    SUMBER DATA
    - Normal (GitHub Pages): data live dari Firestore.
