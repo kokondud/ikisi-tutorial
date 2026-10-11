@@ -5,17 +5,19 @@
 //  dimasukkan dalam SATU commit, jadi GitHub Pages cukup memperbarui situs
 //  sekali. Gambar biasanya bisa diakses publik ±1 menit setelah commit.
 //
-//  Token disimpan di localStorage browser admin, bukan di kode.
+//  Token GitHub TIDAK lagi dipegang admin. Token disimpan sekali sebagai secret
+//  di Tool Hub; halaman ini menyimpan gambar lewat hub memakai izin sementara
+//  yang diberikan hub kepada admin saat masuk.
 // =============================================================================
 
 import { GITHUB } from './github-config.js';
+import { HUB, hubApiToken } from './hub-auth.js';
 
-const TOKEN_KEY = 'ikisi_github_token';
-const API = 'https://api.github.com';
+const API = HUB + '/gh';   // Tool Hub meneruskan ke api.github.com dengan token yang disimpannya
 
-export function getToken(){ try{ return localStorage.getItem(TOKEN_KEY) || ''; }catch(_){ return ''; } }
-export function setToken(t){ localStorage.setItem(TOKEN_KEY, t.trim()); }
-export function clearToken(){ localStorage.removeItem(TOKEN_KEY); }
+export function getToken(){ return hubApiToken; }
+export function setToken(){ /* tidak dipakai lagi: token ada di Tool Hub */ }
+export function clearToken(){ try{ localStorage.removeItem('ikisi_github_token'); }catch(_){} }   // buang token lama yang mungkin masih tersimpan di browser
 export function hasToken(){ return !!getToken(); }
 
 /** true kalau URL ini sudah tersimpan di repo GitHub kita */
@@ -25,7 +27,7 @@ export function isGithubImage(url){
 
 async function gh(path, options = {}){
   const token = getToken();
-  if(!token) throw new Error('Token GitHub belum diisi di bagian Pengaturan Penyimpanan Gambar.');
+  if(!token) throw new Error('Belum mendapat izin menyimpan gambar dari Tool Hub. Muat ulang halaman ini dari Tool Hub.');
   const res = await fetch(API + path, {
     // penting: jangan pakai cache browser. GitHub API menyimpan respons GET
     // selama 60 detik, sehingga posisi branch terbaru bisa terbaca versi lama
@@ -43,8 +45,9 @@ async function gh(path, options = {}){
     let msg = '';
     try{ msg = (await res.json()).message || ''; }catch(_){}
     let text;
-    if(res.status === 401) text = 'Token GitHub tidak valid atau sudah kedaluwarsa. Buat token baru lalu simpan ulang.';
-    else if(res.status === 403 || res.status === 404) text = 'Token GitHub tidak punya izin menulis ke repo ' + GITHUB.owner + '/' + GITHUB.repo + '. Cek pengaturan token (Contents: Read and write).';
+    if(res.status === 401) text = msg || 'Token GitHub di Tool Hub tidak valid atau sudah kedaluwarsa.';
+    else if(res.status === 500 && msg) text = msg;
+    else if(res.status === 403 || res.status === 404) text = msg && /hub/i.test(msg) ? msg : 'Token GitHub di Tool Hub tidak punya izin menulis ke repo ' + GITHUB.owner + '/' + GITHUB.repo + '. Cek pengaturan token (Contents: Read and write).';
     else if(res.status === 422 && /fast forward/i.test(msg)) text = 'Repo GitHub sedang berubah di saat yang sama (misalnya ada file yang diupload/diedit). Tunggu sebentar lalu coba lagi.';
     else text = 'GitHub menolak permintaan (' + res.status + ') ' + msg;
     const err = new Error(text);

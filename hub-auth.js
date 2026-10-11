@@ -12,6 +12,8 @@ import { signInWithCustomToken, setPersistence, inMemoryPersistence } from "http
 export const HUB = 'https://tool-hub.kho-xaverius.workers.dev';
 /** Email pengguna menurut Tool Hub (akun Firebase dari tiket tidak membawa email). */
 export let hubEmail = '';
+/** Izin sementara (8 jam) untuk menyimpan gambar ke GitHub lewat Tool Hub; hanya diberikan ke admin. */
+export let hubApiToken = '';
 
 const never = () => new Promise(() => {});
 
@@ -32,6 +34,7 @@ export async function hubSignIn(auth, { box, needAdmin = false } = {}) {
   history.replaceState(null, '', window.location.pathname);   // tiket jangan tertinggal di alamat
   if (needAdmin && p.get('r') !== 'admin') { window.location.replace('submit.html'); return never(); }
   hubEmail = p.get('e') || '';
+  hubApiToken = p.get('h') || '';
   say('Masuk…');
   try {
     // ponytail: sesi hanya di memori, jadi setiap halaman dimuat ulang hak aksesnya dicek lagi ke Tool Hub.

@@ -233,7 +233,7 @@
       <h2>Penyimpanan Gambar (GitHub)</h2>
       <span class="storage-badge" id="storage-badge">Belum diatur</span>
     </div>
-    <p class="sub" style="margin:4px 0 10px 0;">Gambar tutorial disimpan di folder <code>images/</code> repo <code id="repo-name"></code>. Token hanya tersimpan di browser komputer ini, tidak ikut ke kode.</p>
+    <p class="sub" style="margin:4px 0 10px 0;">Gambar tutorial disimpan di folder <code>images/</code> repo <code id="repo-name"></code>. Token GitHub disimpan sekali di Tool Hub, jadi admin tidak perlu memegang token.</p>
     <div id="token-form">
       <input type="password" id="gh-token" placeholder="Tempel token GitHub (github_pat_...)" autocomplete="off">
       <div class="storage-actions">
@@ -253,7 +253,7 @@
     <div id="token-set" style="display:none;">
       <div class="storage-actions">
         <button class="btn-logout" id="btn-test-token">Tes koneksi</button>
-        <button class="btn-logout" id="btn-clear-token">Hapus token dari browser ini</button>
+        <button class="btn-logout" id="btn-clear-token" style="display:none;">Hapus token dari browser ini</button>
       </div>
     </div>
     <div id="token-status" class="import-status"></div>
@@ -441,7 +441,7 @@ function renderPendingCard(id, data){
   approveBtn.onclick = async () => {
     const hasImages = (data.steps || []).some(s => s && (s.imageRef || (s.image && !isGithubImage(s.image))));
     if(hasImages && !hasToken()){
-      alert('Usulan ini punya screenshot. Isi dulu token GitHub di bagian "Penyimpanan Gambar" di atas, supaya gambarnya bisa disimpan.');
+      alert('Usulan ini punya screenshot, tapi izin menyimpan gambar belum ada. Muat ulang halaman ini dari Tool Hub.');
       document.getElementById('storage-box').scrollIntoView({ behavior:'smooth' });
       return;
     }
@@ -580,7 +580,7 @@ imgModal.addEventListener('click', () => {
 /* ---------- kelola kategori & topik yang sudah tayang ---------- */
 // Gambar yang diupload admin: dikecilkan (maks 1080px, WebP) lalu disimpan ke repo GitHub
 async function uploadImageToGithub(file){
-  if(!hasToken()) throw new Error('Isi token GitHub dulu di bagian Penyimpanan Gambar.');
+  if(!hasToken()) throw new Error('Izin menyimpan gambar belum ada. Muat ulang halaman ini dari Tool Hub.');
   const blob = await compressImage(file);
   const [url] = await commitImages([{ base64: await blobToBase64(blob), ext: extForMime(blob.type) }], 'Gambar tutorial (edit admin)');
   return { url, previewUrl: URL.createObjectURL(blob) };
@@ -949,7 +949,7 @@ function renderManageCategory(catId, cat, index, allDocs){
 document.getElementById('repo-name').textContent = `${GITHUB.owner}/${GITHUB.repo}`;
 const tokenStatus = document.getElementById('token-status');
 function refreshTokenUi(state){
-  const set = hasToken();
+  const set = true;   // token kini disimpan di Tool Hub, bukan di browser
   document.getElementById('token-form').style.display = set ? 'none' : 'block';
   document.getElementById('token-set').style.display = set ? 'block' : 'none';
   const badge = document.getElementById('storage-badge');
@@ -986,6 +986,7 @@ document.getElementById('btn-clear-token').onclick = () => {
   refreshTokenUi();
 };
 refreshTokenUi();
+clearToken();   // token lama di browser ini tidak dipakai lagi
 
 /* ========================= Pindahkan gambar lama (ImgBB) ke GitHub ========================= */
 const migrateBtn = document.getElementById('btn-migrate');
@@ -1008,7 +1009,7 @@ function refreshMigrateUi(){
 }
 
 migrateBtn.onclick = async () => {
-  if(!hasToken()){ alert('Isi token GitHub dulu di bagian Penyimpanan Gambar.'); return; }
+  if(!hasToken()){ alert('Izin menyimpan gambar belum ada. Muat ulang halaman ini dari Tool Hub.'); return; }
   const urls = collectOldImages();
   if(!urls.length) return;
   if(!confirm(`Pindahkan ${urls.length} gambar ke GitHub? Tutorial tetap tayang selama proses berjalan.`)) return;
